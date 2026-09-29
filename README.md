@@ -119,6 +119,19 @@ Drive the stage start to finish cleanly with your own controller, then stop
 after the finish. Recording ends after 5 s standing still. A smooth, tidy run
 matters more than a fast one.
 
+**No time to record?** Let the game provide the line instead. When a stage
+loads, the plugin searches the scene for the stage's own path data and writes
+the candidates to `BepInEx\aorbot\paths_latest.json`. Press F9 in-game to
+redo this. Then:
+
+```powershell
+aorbot import-path --dump D:\Games\artofrally\BepInEx\aorbot\paths_latest.json --out runs\line.npz
+```
+
+It lists every candidate and picks the path that starts at your car, points
+the way the car faces, and runs the whole stage. Without your run, grip starts
+at a default value and the learner finds the real limit.
+
 ### 5. Teach it how to restart the stage
 
 The bot restarts between attempts with a button macro (pause → restart →

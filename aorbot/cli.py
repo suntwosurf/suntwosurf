@@ -1,7 +1,7 @@
 """Command line: ``aorbot <command> --help`` for details.
 
 Offline:   sim-demo, fake-game, rl-train
-Real game: check-telemetry -> record -> build-line -> test-reset -> learn -> report -> drive
+Real game: check-telemetry -> record + build-line (or import-path) -> test-reset -> learn -> report -> drive
 """
 
 from __future__ import annotations
@@ -184,6 +184,26 @@ def cmd_build_line(args) -> int:
     log(f"reference line: {line.length:.0f} m, {len(line.xy)} points -> {args.out}")
     log(f"demonstration: {line.meta['demo_time']:.2f}s, used up to ~{grip:.2f} m/s^2 sideways "
         f"(stored as the grip estimate; [speed] grip = 0 uses it)")
+    return 0
+
+
+def cmd_import_path(args) -> int:
+    from .import_path import line_from_candidate, load_candidates, pick
+
+    dump, cands = load_candidates(args.dump)
+    log(f"scene '{dump['scene']}': {len(cands)} candidate path(s) found by the plugin")
+    for c in cands:
+        verdict = "ok" if c.ok else "; ".join(c.problems)
+        log(f"  [{c.index:2d}] {c.length:7.0f} m ahead, {c.car_distance:5.1f} m from car, "
+            f"{c.angle:3.0f} deg  {verdict:<28} {c.source}")
+    chosen = cands[args.pick] if args.pick is not None else pick(cands)
+    if chosen is None:
+        log(f"no usable stage path found - send me {args.dump} and I'll target the right game class")
+        return 1
+    line = line_from_candidate(chosen, dump["scene"])
+    line.save(args.out)
+    log(f"using [{chosen.index}]: {line.length:.0f} m reference line -> {args.out}")
+    log("no recorded run, so grip starts at the default and the learner finds the real limit")
     return 0
 
 
@@ -389,6 +409,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--smooth", type=float, default=8.0, help="smoothing window in metres")
     s.add_argument("--trim-end", type=float, default=0.0, help="metres to cut off the end (past the finish)")
     s.set_defaults(func=cmd_build_line)
+
+    s = sub.add_parser("import-path", help="reference line from the game's own stage path (no recorded run)")
+    s.add_argument("--dump", default=str(Path("..") / "BepInEx" / "aorbot" / "paths_latest.json"),
+                   help="written by the plugin when you load a stage (or press F9)")
+    s.add_argument("--out", default="runs/line.npz")
+    s.add_argument("--pick", type=int, help="use this candidate number instead of the automatic choice")
+    s.set_defaults(func=cmd_import_path)
 
     for name, func, text in (
         ("test-reset", cmd_test_reset, "run the restart macro once and check the car is at the start"),

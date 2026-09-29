@@ -1,6 +1,7 @@
 // BepInEx 5 plugin for art of rally: streams the player car's state over UDP
 // to the aorbot Python bot (packet layout = AORBOT_STRUCT in
-// aorbot/game/telemetry.py). Read-only: it never changes the game.
+// aorbot/game/telemetry.py), and dumps candidate stage paths for
+// `aorbot import-path` (PathDump.cs). Read-only: it never changes the game.
 
 using System;
 using System.Net;
@@ -13,7 +14,7 @@ using UnityEngine.SceneManagement;
 namespace AorBotTelemetry
 {
     [BepInPlugin(PluginGuid, "AOR Bot Telemetry", "0.1.0")]
-    public class Plugin : BaseUnityPlugin
+    public partial class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "suntwosurf.aorbot.telemetry";
 
@@ -43,6 +44,9 @@ namespace AorBotTelemetry
             carComponent = Config.Bind("Car", "ComponentType", "CarDynamics",
                 "Class name of the game component on the player car; its Rigidbody is streamed. " +
                 "Empty = use the heaviest non-kinematic Rigidbody in the scene.");
+            dumpPaths = Config.Bind("Paths", "DumpOnStageLoad", true,
+                "When a car appears in a new scene (and on F9), write candidate stage paths to " +
+                "BepInEx/aorbot/ so the bot can learn without a recorded run.");
             udp = new UdpClient();
             target = new IPEndPoint(IPAddress.Parse(host.Value), port.Value);
             Logger.LogInfo("streaming car state to " + target);
@@ -57,8 +61,12 @@ namespace AorBotTelemetry
                 nextSearch = Time.unscaledTime + 1f;
                 car = FindCar();
                 if (car != null)
+                {
                     Logger.LogInfo("found car: " + car.name + " (mass " + car.mass + ")");
+                    SchedulePathDump();
+                }
             }
+            UpdatePathDump();
             try
             {
                 Send();

@@ -29,6 +29,18 @@ Start the game. `BepInEx\LogOutput.log` should contain:
 
 Then run `aorbot check-telemetry --config configs\my_stage.toml`.
 
+## Stage path dump (for `aorbot import-path`)
+
+About 3 s after a car appears in a new scene, and whenever you press F9, the
+plugin scans the scene for point lists that form a long path passing the car.
+These can be arrays of positions or transforms on any component or asset, the
+children of large parent objects, or line renderers. It writes them to
+`BepInEx\aorbot\paths_<scene>.json` and `paths_latest.json`. The file also
+records the car's position and direction, plus a count of every component
+type in the scene. The log shows
+`path dump: N candidate path(s) in scene '...'`. Turn it off with
+`Paths.DumpOnStageLoad = false`.
+
 ## Settings
 
 The file is `BepInEx\config\suntwosurf.aorbot.telemetry.cfg`. It is created on
@@ -38,6 +50,7 @@ the first start.
 |---|---|---|
 | Telemetry.Host / Port | 127.0.0.1 / 47800 | where the bot listens |
 | Car.ComponentType | `CarDynamics` | game component on the player car; its Rigidbody is streamed. Empty = heaviest non-kinematic Rigidbody |
+| Paths.DumpOnStageLoad | true | write candidate stage paths when a stage loads (and on F9) |
 
 ## Troubleshooting
 

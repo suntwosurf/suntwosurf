@@ -1,0 +1,54 @@
+# aorbot config for the real game.
+# One fixed setup: a learned speed profile is only valid for exactly this
+# stage + car + weather, and `learn`/`drive` refuse a state file made for another.
+
+[conditions]
+# Free-form labels - write down exactly what you pick in-game.
+stage = "CHANGE ME: region / stage name / direction"
+car = "CHANGE ME: group / car"
+weather = "CHANGE ME: e.g. dry, morning"
+
+[telemetry]
+# "aorbot": the BepInEx plugin in mod/AorBotTelemetry (default port 47800)
+# "forza":  art-of-sim-rally's SimHub telemetry, Forza Horizon 5 format (port 8000)
+format = "aorbot"
+host = "127.0.0.1"
+port = 47800
+timeout = 1.0
+# forza only - check with `aorbot check-telemetry` that heading matches travel:
+# yaw_sign = -1.0
+# yaw_offset_deg = 90.0
+
+[controls]
+backend = "gamepad"      # virtual Xbox pad (pip install vgamepad; installs ViGEmBus)
+control_hz = 30
+steer_deadzone = 0.0     # raise (e.g. 0.1) if small steering inputs do nothing in-game
+handbrake_button = "B"   # unused by the default driver; set to your in-game binding
+
+[reset]
+# Button taps that restart the stage while driving: pause, choose restart, confirm.
+# Menu layouts differ - watch `aorbot test-reset` once and adjust.
+# Buttons: A B X Y START BACK DPAD_UP DPAD_DOWN DPAD_LEFT DPAD_RIGHT LEFT_SHOULDER ...
+macro = ["START", "wait 1.0", "DPAD_DOWN", "wait 0.4", "A", "wait 0.8", "A"]
+start_radius = 15.0      # m from the recorded start that counts as "back at the start"
+settle_time = 1.0
+countdown = 3.5          # s to wait for the start countdown
+timeout = 45.0
+
+[rules]
+max_offset = 6.0         # m from your recorded line = off the stage (attempt failed)
+stuck_time = 4.0
+timeout = 600.0
+
+[speed]
+grip = 0.0               # 0 = use what your recorded run used (stored by build-line)
+brake_decel = 6.0        # m/s^2; try ~4.5 on wet, ~3.5 on snow
+v_max = 50.0
+
+[controller]
+max_steer_angle = 0.55   # lower = steers harder; raise if the car weaves left-right
+lookahead_time = 0.45    # higher = smoother but cuts corners more
+
+[learn]
+init_scale = 0.7         # first attempt at 70% of your corner speeds
+bin_length = 20.0

@@ -1,0 +1,31 @@
+# Try the real-game pipeline without the game:
+#   terminal 1: aorbot fake-game --config configs/fake_game.toml --write-line runs/fake_line.npz
+#   terminal 2: aorbot learn --config configs/fake_game.toml --line runs/fake_line.npz --state runs/fake_learner.json
+[conditions]
+stage = "sim-3"
+car = "sim-car"
+weather = "dry"
+
+[telemetry]
+format = "aorbot"
+port = 47800
+
+[controls]
+backend = "udp"
+udp_port = 47801
+control_hz = 30
+
+[reset]
+macro = ["RESTART"]
+countdown = 0.5
+settle_time = 0.3
+
+[rules]
+max_offset = 6.2   # the fake stage's trees start 6.5 m from the centre
+
+[speed]
+brake_decel = 5.8
+
+[controller]
+wheelbase = 2.5
+max_steer_angle = 0.55

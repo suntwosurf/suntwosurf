@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aorbot"
+version = "0.1.0"
+description = "Learning bot concept for art of rally: finish one stage with one car in one weather"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.22",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+# Virtual Xbox 360 pad (Windows needs the ViGEmBus driver, which the vgamepad installer offers).
+gamepad = ["vgamepad>=0.1.0"]
+# DirectInput keyboard fallback (Windows only).
+keyboard = ["pydirectinput>=1.0.4"]
+plot = ["matplotlib>=3.5"]
+rl = ["gymnasium>=0.29", "stable-baselines3>=2.0"]
+dev = ["pytest>=7", "matplotlib>=3.5", "gymnasium>=0.29"]
+
+[project.scripts]
+aorbot = "aorbot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["aorbot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

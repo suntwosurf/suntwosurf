@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build: dotnet build -c Release            (needs the .NET SDK)
+       Your game folder is copied into automatically when it exists:
+       dotnet build -c Release -p:GameDir="D:\Games\artofrally" -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>AorBotTelemetry</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <GameDir Condition="'$(GameDir)' == ''">D:\Games\artofrally</GameDir>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile-time reference assemblies only; the game provides the real ones. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.40" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <Target Name="CopyToGame" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\AorBotTelemetry" />
+    <Message Importance="high" Text="Copied $(TargetFileName) to $(GameDir)\BepInEx\plugins\AorBotTelemetry" />
+  </Target>
+</Project>

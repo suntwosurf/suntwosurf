@@ -190,7 +190,20 @@ def cmd_build_line(args) -> int:
 def cmd_import_path(args) -> int:
     from .import_path import line_from_candidate, load_candidates, pick
 
-    dump, cands = load_candidates(args.dump)
+    dump_path = Path(args.dump)
+    if not dump_path.exists():
+        others = sorted(dump_path.parent.glob("paths_*.json")) if dump_path.parent.is_dir() else []
+        log(f"{dump_path} not found.")
+        if others:
+            log("The plugin wrote these instead (no usable path in them, or another scene):")
+            for f in others:
+                log(f"  {f}")
+            log("Send me the one for your stage.")
+        else:
+            log("The plugin has not dumped anything yet: start the game (after rebuilding the plugin), "
+                "load the stage, wait ~5 s at the start line (or press F9), then run this again.")
+        return 1
+    dump, cands = load_candidates(dump_path)
     log(f"scene '{dump['scene']}': {len(cands)} candidate path(s) found by the plugin")
     for c in cands:
         verdict = "ok" if c.ok else "; ".join(c.problems)

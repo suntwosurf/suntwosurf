@@ -78,3 +78,13 @@ def test_no_usable_path(tmp_path, capsys):
                                 "candidates": [], "types": {}}))
     assert main(["import-path", "--dump", str(path), "--out", str(tmp_path / "l.npz")]) == 1
     assert "no usable stage path" in capsys.readouterr().out
+
+
+def test_missing_dump_explains_what_to_do(tmp_path, capsys):
+    missing = tmp_path / "aorbot" / "paths_latest.json"
+    assert main(["import-path", "--dump", str(missing), "--out", str(tmp_path / "l.npz")]) == 1
+    assert "has not dumped anything yet" in capsys.readouterr().out
+    missing.parent.mkdir()
+    (missing.parent / "paths_Stage01.json").write_text("{}")
+    assert main(["import-path", "--dump", str(missing), "--out", str(tmp_path / "l.npz")]) == 1
+    assert "paths_Stage01.json" in capsys.readouterr().out

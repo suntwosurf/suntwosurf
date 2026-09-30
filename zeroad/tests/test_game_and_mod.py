@@ -143,3 +143,20 @@ def test_registry_install_dirs(monkeypatch):
     monkeypatch.setitem(sys.modules, "winreg", fake)
     dirs = [str(d).replace("/", "\\") for d in game_mod._registry_install_dirs()]
     assert dirs == [r"D:\Games\0 A.D. Empires Ascendant", r"E:\0ad"]
+
+
+def test_other_layouts(tmp_path):
+    """pyrogenesis a few folders down, and mod.json only inside public.zip."""
+    root = tmp_path / "0 A.D. Empires Ascendant"
+    make_install(root / "extra", GAME_VERSION)
+    (root / "extra" / "binaries" / "data" / "mods" / "public" / "mod.json").unlink()
+    with zipfile.ZipFile(root / "extra" / "binaries" / "data" / "mods" / "public" / "public.zip", "a") as zf:
+        zf.writestr("mod.json", json.dumps({"name": "0ad", "version": GAME_VERSION}))
+    game = find_game(str(root))
+    assert game.version == GAME_VERSION and game.problems() == []
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        find_game(str(tmp_path / "missing"))
+    (tmp_path / "empty").mkdir()
+    with pytest.raises(FileNotFoundError, match="has no pyrogenesis"):
+        find_game(str(tmp_path / "empty"))

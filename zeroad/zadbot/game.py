@@ -51,9 +51,38 @@ class GameInstall:
 
 
 def read_version(data_dir: Path) -> str:
-    """Version of the game's main mod ("public"), e.g. "0.28.0"."""
-    with open(data_dir / "mods" / "public" / "mod.json", encoding="utf-8") as fh:
-        return str(json.load(fh)["version"])
+    """Version of the game's main mod ("public"), e.g. "0.28.0". Like the
+    engine (Mod.cpp), fall back to the mod.json inside public.zip."""
+    public = data_dir / "mods" / "public"
+    if (public / "mod.json").is_file():
+        text = (public / "mod.json").read_text(encoding="utf-8")
+    else:
+        with zipfile.ZipFile(public / "public.zip") as zf:
+            text = zf.read("mod.json").decode("utf-8")
+    return str(json.loads(text)["version"])
+
+
+def _has_public(data_dir: Path) -> bool:
+    public = data_dir / "mods" / "public"
+    return (public / "mod.json").is_file() or (public / "public.zip").is_file()
+
+
+def _exe_name() -> str:
+    return "pyrogenesis.exe" if sys.platform == "win32" else "pyrogenesis"
+
+
+def _exe_in(folder: Path, max_depth: int = 4) -> Path | None:
+    """pyrogenesis in an install folder: the usual places first, then a
+    search a few folders deep (for layouts other than the installer's)."""
+    exe = _exe_name()
+    for sub in (Path("binaries/system") / exe, Path("usr/bin") / exe, Path(exe)):
+        if (folder / sub).is_file():
+            return folder / sub
+    if folder.is_dir():
+        for found in sorted(folder.rglob(exe)):
+            if len(found.relative_to(folder).parts) <= max_depth:
+                return found
+    return None
 
 
 def _data_dir_for(binary: Path) -> Path | None:
@@ -64,13 +93,15 @@ def _data_dir_for(binary: Path) -> Path | None:
         Path("/usr/share/0ad"),
     ]
     for c in candidates:
-        if (c / "mods" / "public" / "mod.json").is_file():
+        if _has_public(c):
             return c
     return None
 
 
 def _default_binaries() -> list[Path]:
-    exe = "pyrogenesis.exe" if sys.platform == "win32" else "pyrogenesis"
+    """Where to look for the game; on Windows an existing install folder is
+    searched (see _exe_in)."""
+    exe = _exe_name()
     roots: list[Path] = []
     if sys.platform == "win32":
         roots += _registry_install_dirs()
@@ -78,7 +109,7 @@ def _default_binaries() -> list[Path]:
             base = os.environ.get(env)
             if base:
                 roots += [Path(base) / "0 A.D. Empires Ascendant", Path(base) / "0 A.D."]
-        return [r / "binaries" / "system" / exe for r in roots]
+        return [_exe_in(r) or r / "binaries" / "system" / exe for r in roots]
     if sys.platform == "darwin":
         return [Path("/Applications/0 A.D..app/Contents/MacOS/pyrogenesis")]
     return [
@@ -120,11 +151,11 @@ def _binary_for(path: Path) -> Path:
     """Accept the binary itself or an install folder."""
     if path.is_file():
         return path
-    exe = "pyrogenesis.exe" if sys.platform == "win32" else "pyrogenesis"
-    for sub in (Path("binaries/system") / exe, Path("usr/bin") / exe, Path(exe)):
-        if (path / sub).is_file():
-            return path / sub
-    raise FileNotFoundError(f"no {exe} in {path}")
+    found = _exe_in(path)
+    if found is None:
+        what = "does not exist" if not path.exists() else "has no " + _exe_name()
+        raise FileNotFoundError(f"{path} {what}")
+    return found
 
 
 def fake_install(data_dir: Path | None = None) -> GameInstall:
@@ -161,7 +192,9 @@ def find_game(path: str = "") -> GameInstall:
     binary = binaries[0].resolve()
     data_dir = _data_dir_for(binary)
     if data_dir is None:
-        raise FileNotFoundError(f"found {binary}, but no data/mods/public next to it")
+        raise FileNotFoundError(
+            f"found {binary}, but no data/mods/public/ (mod.json or public.zip) next to it"
+        )
     return GameInstall(command=[str(binary)], data_dir=data_dir, version=read_version(data_dir))
 
 

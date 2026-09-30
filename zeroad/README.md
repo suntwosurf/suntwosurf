@@ -233,7 +233,7 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 46 tests.
+  game version. 47 tests.
 
 Not tested yet (needs the game running):
 * Real headless matches: the finish test and learning. The command line

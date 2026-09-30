@@ -8,6 +8,7 @@ parallel matches never share a params.js.
 from __future__ import annotations
 
 import json
+import math
 import queue
 import threading
 import time
@@ -163,7 +164,7 @@ def evaluate(
     """Each variant (settings, or a fixed AI name) plays the same ``n`` fresh
     scenarios against the opponent. Returns win/loss statistics per variant."""
     scenarios = make_scenarios(cfg.match, n, seed)
-    out = {}
+    out, outcomes = {}, {}
     for name, v in variants.items():
         jobs = [
             Job(scenario=s, values=v if isinstance(v, dict) else None, bot_ai=v if isinstance(v, str) else "",
@@ -172,7 +173,26 @@ def evaluate(
         ]
         results = runner.run_all(jobs)
         out[name] = summarize(results, [s.bot_side for s in scenarios])
+        outcomes[name] = [outcome(r, s.bot_side) for r, s in zip(results, scenarios)]
+    if "petra" in outcomes:
+        for name in outcomes:
+            if name != "petra":
+                out[name]["paired"] = paired_comparison(outcomes[name], outcomes["petra"])
     return out
+
+
+def paired_comparison(a: list[float | None], b: list[float | None]) -> dict:
+    """Two variants on the same scenarios: on how many did only one of them
+    win, and how likely is a split at least that uneven by pure chance (exact
+    two-sided sign test, i.e. McNemar)."""
+    better = sum(1 for x, y in zip(a, b) if x is not None and y is not None and x > 0 >= y)
+    worse = sum(1 for x, y in zip(a, b) if x is not None and y is not None and y > 0 >= x)
+    n = better + worse
+    if n == 0:
+        return {"better": 0, "worse": 0, "p": 1.0}
+    k = max(better, worse)
+    tail = sum(math.comb(n, i) for i in range(k, n + 1)) / 2 ** n
+    return {"better": better, "worse": worse, "p": min(1.0, 2 * tail)}
 
 
 def summarize(results: list[MatchResult], bot_ids: list[int]) -> dict:

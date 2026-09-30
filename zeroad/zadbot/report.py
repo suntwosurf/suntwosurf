@@ -43,6 +43,17 @@ def evaluation_report(results: dict[str, dict]) -> list[str]:
             f"  {_pct(r['win_rate']):>8s}  {r['mean_outcome']:+12.2f}  {r['mean_score_margin']:+12.2f}  {r['mean_game_minutes']:8.1f}"
             + (f"   ({r['unfinished']} unfinished)" if r["unfinished"] else "")
         )
+    for name, r in results.items():
+        pc = r.get("paired")
+        if not pc:
+            continue
+        lines.append("")
+        lines.append(f"{name} vs petra on the same maps: {name} won {pc['better']} that petra lost, "
+                     f"petra won {pc['worse']} that {name} lost.")
+        odds = f"about 1 in {1 / pc['p']:.0f}" if pc["p"] > 0 else "never"
+        verdict = ("a real difference (p < 0.05)" if pc["p"] < 0.05 else
+                   "not proven yet: play more matches (--matches)")
+        lines.append(f"  A split this uneven happens by pure chance {odds} times (p = {pc['p']:.2f}): {verdict}.")
     return lines
 
 

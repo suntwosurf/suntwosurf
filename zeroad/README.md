@@ -67,6 +67,41 @@ Every game was played to the end. A headless game runs about 100 times
 faster than real time here: a learning match (30 min limit) took 6–25 s,
 so a generation of 16 matches takes about 4 minutes with one game at a time.
 
+## First learning run (real game)
+
+Windows, 0 A.D. 0.28.0, `configs/many_cores.toml`: 32 generations (the first
+2 with 8 x 2 matches, then 16 candidates x 4 matches), 16 games at a time,
+about 2,000 matches, Medium difficulty on both sides, mainland 128, 30 min
+limit.
+
+The learned bot's own result per generation stayed near 0 (even with Petra)
+for most of the run and was highest at the end: the average of the last 5
+generations was **+0.26**. What it learned is consistent from generation ~12
+on, an **economy first, fight later** style:
+
+| setting | learned | meaning |
+|---|---|---|
+| workers | 1.33 x Petra | a bigger economy |
+| phase3_workers | 1.36 x Petra | more workers before the city phase |
+| phase2_pop | 1.16 x Petra | town phase a bit later |
+| support_ratio | 0.80 x Petra | fewer women, more citizen soldiers as workers |
+| soldier_priority | 0.75 x Petra | less spending on soldiers early |
+| barracks1_pop / barracks2_pop | 1.33 / 0.66 x Petra | later first barracks, sooner second |
+| aggressive / defensive | 0.35 / 0.42 (Petra 0.50) | fewer early attacks |
+
+`zadbot evaluate --baseline --matches 48` on 48 maps it never trained on
+(both variants on the same maps, civilisations and sides):
+
+| vs Petra (Medium) | wins | losses | win rate | conquest W/L | mean outcome | score margin |
+|---|---|---|---|---|---|---|
+| **learned bot** | 29 | 19 | **60 %** | 12 / 10 | +0.10 | +0.08 |
+| plain Petra | 21 | 27 | 44 % | 11 / 12 | -0.08 | -0.08 |
+
+Match by match: on 14 maps only the learned bot won, on 6 only Petra won
+(both won 15, both lost 13). A split this uneven happens by chance about 1
+time in 9 (sign test, p = 0.12), so the edge is **promising but not proven**;
+a larger evaluation (`--matches 200`) settles it.
+
 ## How the learning works
 
 1. **Scenarios.** Each generation picks maps, seeds and civilisations (mirror
@@ -87,7 +122,8 @@ so a generation of 16 matches takes about 4 minutes with one game at a time.
 
 The centre is the learned bot. `zadbot evaluate` plays it against Petra on
 seeds it never trained on, next to plain Petra vs Petra on the same seeds
-(`--baseline`).
+(`--baseline`), and compares the two map by map: on how many maps only one of
+them won, and how likely such a split is by pure chance.
 
 Reading `zadbot show`: a single match is close to a coin flip, so the
 centre's value for one generation (4 matches) swings a lot, and "best" is the
@@ -299,14 +335,15 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 65 tests.
+  game version. 66 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 
-Not tested yet:
-* Whether the learned bot beats Petra: learning runs on the real game
-  (Windows, 16 parallel copies, 64 matches per generation, about 0.3-1.3 min
-  real time per match with 16 at once), but its result is not evaluated yet.
+* The first full learning run and its evaluation on the real game (see
+  *First learning run*).
+
+Not proven yet:
+* That the learned bot beats Petra: 60 % vs 44 % on 48 maps, p = 0.12.
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
   writes on every OS, and errors from the game's own log

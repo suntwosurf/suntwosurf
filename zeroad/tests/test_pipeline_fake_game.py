@@ -90,3 +90,53 @@ def test_cli_on_fake_game(tmp_path, monkeypatch, capsys):
     params = tmp_path / "runs/fake-user-data/mods/zadbot/simulation/ai/zadbot/params.js"
     assert "personality.aggressive" in params.read_text()
     assert not list((tmp_path / "runs/fake-user-data/mods/zadbot/simulation/ai").glob("zadbot_t*"))
+
+
+# --- Windows: the game prints nothing to the console, only its log file tells
+def test_windows_finished_match_without_console(fake_cfg, tmp_path, monkeypatch):
+    monkeypatch.setenv("ZADBOT_FAKE_WINDOWS", "1")
+    user = Path(fake_cfg.game.user_data)
+    ensure_installed(user)
+    spec = MatchSpec(players=[PlayerSpec("petra", 5), PlayerSpec("petra", 1)], seed=4, ai_seed=4, time_limit=0)
+    r = run_match(fake_install(), spec, user, timeout=60)
+    assert r.finished and r.winners == [1] and r.log_tail == []
+
+
+def test_windows_failure_is_explained(fake_cfg, tmp_path, monkeypatch):
+    monkeypatch.setenv("ZADBOT_FAKE_WINDOWS", "1")
+    monkeypatch.setenv("ZADBOT_FAKE_FAIL", "Failed to load map <random/mainland>")
+    user = Path(fake_cfg.game.user_data)
+    ensure_installed(user)
+    spec = MatchSpec(players=[PlayerSpec("petra", 5), PlayerSpec("petra", 1)], seed=5, ai_seed=5, time_limit=0)
+    r = run_match(fake_install(), spec, user, timeout=60)
+    assert r.status == "failed"
+    assert "without a replay" in r.errors[0]
+    assert "ERROR: Failed to load map <random/mainland>" in r.errors
+    assert r.game_log and Path(r.game_log).name.startswith("interestinglog_")
+    assert "s real" in r.summary()
+
+
+def test_windows_incompatible_version_from_log(fake_cfg, tmp_path, monkeypatch):
+    monkeypatch.setenv("ZADBOT_FAKE_WINDOWS", "1")
+    data = tmp_path / "data"
+    shutil.copytree(fake_install().data_dir, data)
+    mod_json = data / "mods" / "public" / "mod.json"
+    mod_json.write_text(json.dumps(dict(json.loads(mod_json.read_text()), version="0.27.1")))
+    lr = CrossEntropyLearner(fake_cfg.learn, fake_cfg.match)
+    with pytest.raises(IncompatibleGame, match="incompatible mods: zadbot"):
+        learn(fake_cfg, runner(fake_cfg, tmp_path, fake_install(data)), lr, 1, tmp_path / "l.json", lambda m: None)
+
+
+def test_cli_explains_refused_mod(tmp_path, monkeypatch, capsys):
+    """finish-test on a game that refuses the mod: a message, not a traceback."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ZADBOT_FAKE_WINDOWS", "1")
+    assert main(["install-mod", "--game", "fake"]) == 0
+    # the Python check passes (0.28.0), but the game refuses this mod.json
+    mod_json = tmp_path / "runs/fake-user-data/mods/zadbot/mod.json"
+    monkeypatch.setattr("zadbot.modinstall.ensure_installed", lambda user_data: None)
+    mod_json.write_text(json.dumps(dict(json.loads(mod_json.read_text()), dependencies=["0ad=0.27.0"])))
+    capsys.readouterr()
+    assert main(["finish-test", "--game", "fake", "--games", "1", "--workers", "1"]) == 1
+    out = capsys.readouterr().out
+    assert "did not accept the zadbot mod" in out and "incompatible mods: zadbot" in out

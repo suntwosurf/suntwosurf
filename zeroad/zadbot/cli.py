@@ -49,6 +49,15 @@ def _game(cfg: BotConfig) -> tuple[GameInstall, Path]:
     return game, _user_data(cfg, game)
 
 
+def _refused(e: Exception, user_data: Path) -> int:
+    from .modinstall import mod_dir
+
+    log(f"stopped: the game did not accept the zadbot mod: {e}")
+    log(f"  The mod is in {mod_dir(user_data)}. zadbot check shows the game version; if your game keeps")
+    log("  its mods in another folder, pass --user-data <the folder that contains mods\\>.")
+    return 1
+
+
 def _runner(cfg: BotConfig, game: GameInstall, user_data: Path, out: Path | None):
     from .modinstall import ensure_installed
     from .pipeline import MatchRunner
@@ -114,8 +123,10 @@ def _print_result(result) -> None:
             f"(economy {p['economy']:.0f}, military {p['military']:.0f}, exploration {p['exploration']:.0f})")
     if result.replay_dir:
         log(f"  replay: {result.replay_dir}  (watch it in the game: Replays)")
-    for e in result.errors[-5:]:
+    for e in result.errors[:10]:
         log(f"  error: {e}")
+    if result.game_log and not result.finished:
+        log(f"  game log: {result.game_log}")
     if not result.finished and result.log_tail:
         log("  last output:")
         log("\n".join("    " + line for line in result.log_tail[-15:]))
@@ -123,6 +134,7 @@ def _print_result(result) -> None:
 
 def cmd_match(args) -> int:
     from .match import MatchSpec, PlayerSpec
+    from .pipeline import IncompatibleGame
 
     cfg = _config(args)
     game, user_data = _game(cfg)
@@ -134,14 +146,17 @@ def cmd_match(args) -> int:
     runner = _runner(dataclasses.replace(cfg, game=dataclasses.replace(cfg.game, workers=1)), game, user_data, Path(args.out))
     from .pipeline import Job
 
-    result = runner.run_one(Job(spec=spec, tag={"match": args.seed}))
+    try:
+        result = runner.run_one(Job(spec=spec, tag={"match": args.seed}))
+    except IncompatibleGame as e:
+        return _refused(e, user_data)
     _print_result(result)
     return 0 if result.finished else 1
 
 
 def cmd_finish_test(args) -> int:
     from .match import PlayerSpec
-    from .pipeline import finish_test
+    from .pipeline import IncompatibleGame, finish_test
 
     cfg = _config(args)
     game, user_data = _game(cfg)
@@ -149,7 +164,10 @@ def cmd_finish_test(args) -> int:
     log(f"finish test: {bot.label()} vs {opp.label()}, {args.games} full game(s) on {args.map} "
         f"(size {args.size}), no time limit, {cfg.game.workers} at a time")
     runner = _runner(cfg, game, user_data, Path(args.out))
-    results = finish_test(runner, bot, opp, args.games, args.map, args.size, args.seed)
+    try:
+        results = finish_test(runner, bot, opp, args.games, args.map, args.size, args.seed)
+    except IncompatibleGame as e:
+        return _refused(e, user_data)
     finished = [r for r in results if r.finished and r.reason == "conquest"]
     bot_wins = [r for r in finished if 1 in r.winners]
     log("")
@@ -184,8 +202,7 @@ def cmd_learn(args) -> int:
     try:
         learn(cfg, runner, learner, args.generations, state, log)
     except IncompatibleGame as e:
-        log(f"stopped: the game refused the bot: {e}")
-        return 1
+        return _refused(e, user_data)
     except KeyboardInterrupt:
         log(f"stopped; finished generations are saved in {state}")
         return 130
@@ -198,7 +215,7 @@ def cmd_learn(args) -> int:
 
 def cmd_evaluate(args) -> int:
     from .learner import load_centre
-    from .pipeline import evaluate
+    from .pipeline import IncompatibleGame, evaluate
     from .report import evaluation_report
 
     cfg = _config(args)
@@ -216,7 +233,10 @@ def cmd_evaluate(args) -> int:
     log(f"evaluating {', '.join(variants)} vs {m.opponent} (difficulty {m.difficulty}): {n} matches each, "
         f"seeds from {cfg.evaluate.seed} (not used in training)")
     runner = _runner(cfg, game, user_data, Path(args.state).parent)
-    results = evaluate(cfg, runner, variants, n, cfg.evaluate.seed)
+    try:
+        results = evaluate(cfg, runner, variants, n, cfg.evaluate.seed)
+    except IncompatibleGame as e:
+        return _refused(e, user_data)
     out = Path(args.state).parent / "evaluate.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(results, indent=1), encoding="utf-8")

@@ -13,6 +13,7 @@ game sends that text to the debugger instead, so it is only a bonus.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -96,6 +97,7 @@ class MatchResult:
     replay_dir: str | None = None
     errors: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
+    game_log: str | None = None  # the game's interestinglog (errors and warnings)
 
     @property
     def finished(self) -> bool:
@@ -117,8 +119,8 @@ class MatchResult:
     def summary(self) -> str:
         spec = MatchSpec.from_dict(self.spec)
         if not self.finished:
-            why = f": {self.errors[-1]}" if self.errors else ""
-            return f"{self.status} after {self.game_time / 60:.1f} game-min{why}"
+            why = f": {self.errors[0]}" if self.errors else ""
+            return f"{self.status} after {self.game_time / 60:.1f} game-min ({self.wall_time:.0f} s real){why}"
         names = {i + 1: p.label() for i, p in enumerate(spec.players)}
         who = ", ".join(f"P{w} {names.get(w, '?')}" for w in self.winners) or "nobody"
         scores = "  ".join(f"P{p['id']} {p['score']:.0f}" for p in self.players)
@@ -154,6 +156,7 @@ def build_command(game: GameInstall, spec: MatchSpec, victory: list[str]) -> lis
         "-mod=public",
         f"-mod={MOD_NAME}",
         "-autostart-nonvisual",
+        "-unique-logs",  # logs named by process id, so parallel games keep their own
         f"-autostart={spec.map}",
         "-autostart-player=-1",  # observer: every player is an AI
         f"-autostart-seed={spec.seed}",
@@ -290,6 +293,24 @@ def find_replay(replays_root: Path, spec: MatchSpec, since: float, hint: str | N
     return None
 
 
+def read_game_log(logs_dir: Path, pid: int) -> tuple[Path | None, list[str]]:
+    """The errors and warnings this game process wrote (``-unique-logs``
+    names the file interestinglog_<time>_<pid>.html). On Windows this is the
+    only place they show up."""
+    if not logs_dir.is_dir():
+        return None, []
+    files = sorted(logs_dir.glob(f"interestinglog_*_{pid}.html"), key=lambda f: f.stat().st_mtime)
+    if not files:
+        return None, []
+    text = files[-1].read_text(encoding="utf-8", errors="replace")
+    lines = []
+    for m in re.finditer(r"<p[^>]*>(.*?)</p>", text, re.S):
+        line = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
+        if line.startswith(("ERROR", "WARNING")):
+            lines.append(line)
+    return files[-1], lines
+
+
 def parse_stdout_line(line: str, state: dict) -> None:
     """Collect what the game prints (Linux/macOS): progress, errors, ZADBOT events."""
     m = _TURN_RE.match(line)
@@ -358,8 +379,15 @@ def run_match(
     t.join(timeout=10)
     wall = time.time() - started
 
+    # The game's own log: on Windows the only place its errors appear.
+    log_file, log_lines = read_game_log(game.logs_dir or user_data / "logs", proc.pid)
+    for line in log_lines:
+        if line not in state.get("errors", []):
+            parse_stdout_line(line, state)
+
     result = MatchResult(spec=spec.to_dict(), status="failed", wall_time=wall,
-                         errors=list(state.get("errors", [])), log_tail=list(tail))
+                         errors=list(state.get("errors", [])), log_tail=list(tail),
+                         game_log=str(log_file) if log_file else None)
     result.game_time = state.get("turn", 0) * TURN_SECONDS
     if "incompatible" in state:
         result.status = "incompatible"
@@ -387,7 +415,13 @@ def run_match(
         result.errors.append(f"stopped after {timeout / 60:.0f} min of real time")
         _fill_from_events(result, state.get("events", []))
     else:
-        result.errors.append(f"no replay result found (exit code {proc.returncode})")
+        if replay is None:
+            result.errors.insert(0, f"the game exited (code {proc.returncode}) without a replay of this match")
+        else:
+            result.errors.insert(0, f"the game exited (code {proc.returncode}) before the match ended: "
+                                    f"no metadata.json in {replay}")
+        warnings = [line for line in log_lines if line.startswith("WARNING")]
+        result.errors += warnings[-5:]
         _fill_from_events(result, state.get("events", []))
     return result
 

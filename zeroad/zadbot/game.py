@@ -22,6 +22,8 @@ class GameInstall:
     version: str
     fake: bool = False
     notes: list[str] = field(default_factory=list)
+    # where the game writes mainlog/interestinglog; None = <user data>/logs (fake game)
+    logs_dir: Path | None = None
 
     @property
     def public_dir(self) -> Path:
@@ -195,7 +197,8 @@ def find_game(path: str = "") -> GameInstall:
         raise FileNotFoundError(
             f"found {binary}, but no data/mods/public/ (mod.json or public.zip) next to it"
         )
-    return GameInstall(command=[str(binary)], data_dir=data_dir, version=read_version(data_dir))
+    return GameInstall(command=[str(binary)], data_dir=data_dir, version=read_version(data_dir),
+                       logs_dir=default_logs_dir())
 
 
 def _windows_documents() -> Path:  # pragma: no cover - Windows only
@@ -217,6 +220,16 @@ def default_user_data() -> Path:
         return Path.home() / "Library" / "Application Support" / "0ad"
     xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     return Path(xdg) / "0ad"
+
+
+def default_logs_dir() -> Path:
+    """Where 0 A.D. writes mainlog.html / interestinglog.html (Paths.cpp)."""
+    if sys.platform == "win32":  # pragma: no cover
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "0ad" / "logs"
+    if sys.platform == "darwin":  # pragma: no cover
+        return Path.home() / "Library" / "Application Support" / "0ad" / "logs"
+    xdg = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(xdg) / "0ad" / "log"
 
 
 def user_data_dir(configured: str = "") -> Path:

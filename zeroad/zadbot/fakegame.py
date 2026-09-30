@@ -13,6 +13,7 @@ anything about the real game.
 
 from __future__ import annotations
 
+import html
 import json
 import math
 import os
@@ -56,7 +57,7 @@ def _version_ok(have: str, dep: str) -> bool:
     return True
 
 
-def strength(user_data: Path, ai: str) -> float:
+def strength(user_data: Path, ai: str, log: "_Log | None" = None) -> float:
     if ai == "petra":
         return 0.0
     params = user_data / "mods" / "zadbot" / "simulation" / "ai" / ai / "params.js"
@@ -72,8 +73,8 @@ def strength(user_data: Path, ai: str) -> float:
         u = to_unit(p, entry["value"]) if entry else default_u
         s += HIDDEN_WEIGHT * ((default_u - opt) ** 2 - (u - opt) ** 2)
     unknown = [t for t in learned if t not in by_target]
-    if unknown:
-        print("WARNING: zadbot: unknown Petra settings: " + ", ".join(unknown), flush=True)
+    if unknown and log is not None:
+        log.warning("PlayerID 1 |   zadbot: unknown Petra settings: " + ", ".join(unknown))
     return s
 
 
@@ -115,10 +116,52 @@ def _sequences(times: list[float], final_score: float, kills: float, explored: f
     }
 
 
+class _Log:
+    """Like the engine: errors go to stdout (not on Windows, see
+    ZADBOT_FAKE_WINDOWS) and, with -unique-logs, to
+    <logs>/interestinglog_<time>_<pid>.html."""
+
+    def __init__(self, logs_dir: Path | None, windows: bool):
+        self.windows = windows
+        self.file = None
+        if logs_dir is not None:
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            path = logs_dir / f"interestinglog_{int(time.time())}_{os.getpid()}.html"
+            self.file = open(path, "w", encoding="utf-8")
+            self.file.write("<html><body><h1>Pyrogenesis Log</h1>\n")
+
+    def print(self, text: str) -> None:
+        if not self.windows:
+            print(text, flush=True)
+
+    def error(self, msg: str) -> None:
+        self.print(f"ERROR: {msg}")
+        if self.file:
+            self.file.write(f'<p class="error">ERROR: {html.escape(msg)}</p>\n')
+
+    def warning(self, msg: str) -> None:
+        self.print(f"WARNING: {msg}")
+        if self.file:
+            self.file.write(f'<p class="warning">WARNING: {html.escape(msg)}</p>\n')
+
+    def close(self) -> None:
+        if self.file:
+            self.file.write("<p>Engine exited successfully</p>\n")
+            self.file.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     a = _args(sys.argv[1:] if argv is None else argv)
-    data_dir = Path(a.get("data-dir", [str(default_data_dir())])[0])
     user_data = Path(os.environ.get("ZADBOT_USER_DATA") or default_user_data())
+    log = _Log(user_data / "logs" if "unique-logs" in a else None, bool(os.environ.get("ZADBOT_FAKE_WINDOWS")))
+    try:
+        return _play(a, user_data, log)
+    finally:
+        log.close()
+
+
+def _play(a: dict[str, list[str]], user_data: Path, log: _Log) -> int:
+    data_dir = Path(a.get("data-dir", [str(default_data_dir())])[0])
     version = json.loads((data_dir / "mods" / "public" / "mod.json").read_text(encoding="utf-8"))["version"]
 
     for mod in a.get("mod", []):
@@ -127,12 +170,17 @@ def main(argv: list[str] | None = None) -> int:
         mod_json = user_data / "mods" / mod / "mod.json"
         deps = json.loads(mod_json.read_text(encoding="utf-8")).get("dependencies", []) if mod_json.is_file() else None
         if deps is None or not all(_version_ok(version, d) for d in deps):
-            print(f"ERROR: Trying to start with incompatible mods: {mod}.", flush=True)
-            return 1
+            log.error(f"Trying to start with incompatible mods: {mod}.")
+            return 0  # the real game also exits "successfully" here
 
     if "autostart-nonvisual" not in a or "autostart" not in a:
-        print("ERROR: the fake game only does -autostart-nonvisual matches", flush=True)
+        log.error("the fake game only does -autostart-nonvisual matches")
         return 1
+
+    fail = os.environ.get("ZADBOT_FAKE_FAIL")
+    if fail:  # for tests: quit during loading, like a broken setup
+        log.error(fail)
+        return 0
 
     seed = int(a.get("autostart-seed", ["0"])[0])
     ai_seed = int(a.get("autostart-aiseed", ["0"])[0])
@@ -154,10 +202,10 @@ def main(argv: list[str] | None = None) -> int:
             limit = int(v.rsplit("_", 1)[1])
 
     try:
-        strengths = {i: strength(user_data, ais.get(i, "petra")) + 0.4 * (int(diffs.get(i, "3")) - 3)
+        strengths = {i: strength(user_data, ais.get(i, "petra"), log) + 0.4 * (int(diffs.get(i, "3")) - 3)
                      for i in range(1, n_players + 1)}
     except FileNotFoundError as e:
-        print(f"ERROR: {e}", flush=True)
+        log.error(str(e))
         return 1
 
     # the pretend match (2 players)
@@ -183,14 +231,14 @@ def main(argv: list[str] | None = None) -> int:
         },
     }
     (replay / "commands.txt").write_text("start " + json.dumps(attribs) + "\n", encoding="utf-8")
-    print(f"FILES| Replay written to '{replay}'", flush=True)
+    log.print(f"FILES| Replay written to '{replay}'")
 
     base = 1500 * end_min / 30
     scores = {i: base * (1 + 0.15 * math.tanh(strengths[i] - strengths[3 - i] if n_players == 2 else 0))
               for i in range(1, n_players + 1)}
     times = [float(t) for t in range(0, end_s, 30)] + [float(end_s)]
     for t in range(60, end_s + 1, 60):
-        print(f"Turn {t * 5} (200)...", flush=True)
+        log.print(f"Turn {t * 5} (200)...")
     states = {i: ("won" if i == stronger else "defeated") for i in range(1, n_players + 1)}
     player_states = [{"name": "Gaia", "civ": "gaia", "state": "active", "popCount": 0}]
     for i in range(1, n_players + 1):
@@ -200,11 +248,11 @@ def main(argv: list[str] | None = None) -> int:
         })
     end_players = [{"id": i, "ai": ais.get(i, ""), "state": states[i], "score": round(scores[i])}
                    for i in range(1, n_players + 1)]
-    print("ZADBOT " + json.dumps({"event": "end", "time": end_s, "reason": reason, "winners": [stronger],
-                                  "players": end_players}), flush=True)
+    log.print("ZADBOT " + json.dumps({"event": "end", "time": end_s, "reason": reason, "winners": [stronger],
+                                      "players": end_players}))
     meta = {"timeElapsed": end_s * 1000, "playerStates": player_states, "mapSettings": attribs["settings"]}
     (replay / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
-    print(f"FILES| Replay metadata written to '{replay / 'metadata.json'}'", flush=True)
+    log.print(f"FILES| Replay metadata written to '{replay / 'metadata.json'}'")
     return 0
 
 

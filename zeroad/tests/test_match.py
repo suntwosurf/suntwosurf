@@ -119,3 +119,27 @@ def test_parse_stdout_line():
     assert state["replay_hint"] == "/x/replays/0.28.0/2026_0001"
     assert state["events"][0]["event"] == "tick"
     assert "incompatible" in state
+
+
+def test_read_game_log(tmp_path):
+    from zadbot.match import read_game_log
+
+    (tmp_path / "interestinglog_100_42.html").write_text(
+        "<html><body><h1>Pyrogenesis Log</h1>\n"
+        '<p class="error">ERROR: JavaScript error: simulation/ai/zadbot_t0/_zadbot.js line 1\n'
+        "SyntaxError: &lt;oops&gt;</p>\n"
+        '<p class="warning">WARNING: PlayerID 1 |   zadbot: unknown Petra settings: Economy.x</p>\n'
+        "<p>Engine exited successfully on 2026-10-01</p>\n"
+    )
+    (tmp_path / "interestinglog_100_7.html").write_text('<p class="error">ERROR: other game</p>')
+    path, lines = read_game_log(tmp_path, 42)
+    assert path.name == "interestinglog_100_42.html"
+    assert lines[0].startswith("ERROR: JavaScript error") and "SyntaxError: <oops>" in lines[0]
+    assert lines[1].endswith("unknown Petra settings: Economy.x")
+    assert len(lines) == 2
+    assert read_game_log(tmp_path, 99) == (None, [])
+    assert read_game_log(tmp_path / "missing", 42) == (None, [])
+    state: dict = {}
+    for line in lines:
+        parse_stdout_line(line, state)
+    assert "incompatible" in state and state["errors"][0].startswith("ERROR: JavaScript")

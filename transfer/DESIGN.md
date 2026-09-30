@@ -189,10 +189,10 @@ whether the concept layer is what transfers.
 1. **Done:** OpenRA-RL runs headless in the container (pinned versions,
    `openra/setup.sh`). Also confirmed that 0 A.D. bots can write data to the
    log on every OS.
-2. **Done for 0 A.D.:** the shared features and macro actions in code: the
-   Python definition (`rtsconcepts/spec.py`) and the 0 A.D. encoder in JS
-   (`zeroad/.../ai/zadbot/rts.js`), kept equal by a test. Next: the OpenRA
-   encoder in Python.
+2. **Done:** the shared features and macro actions in code: the Python
+   definition (`rtsconcepts/spec.py`), the 0 A.D. encoder in JS
+   (`zeroad/.../ai/zadbot/rts.js`, kept equal by a test) and the OpenRA
+   encoder (`rtsconcepts/openra.py`, from OpenRA-RL's `get_game_state`).
 3. **Recorder done, data pending:** the AI "zadbot recorder (plain Petra)"
    and `zadbot record`. It is checked on the real 0.28.0 Petra modules with a
    made-up game state, and end to end on the stand-in game;
@@ -205,8 +205,25 @@ whether the concept layer is what transfers.
    balanced accuracy as the fair measure. Next: the concept bottleneck, and
    the student playing in 0 A.D.
 5. Evaluation vs Petra; reinforcement learning to pass the gates.
-6. The OpenRA executor and the A/B/C experiment. It runs in this container,
-   on OpenRA-RL, headless.
+6. **Started:** the OpenRA executor (`rtsconcepts/openra.py`: each macro
+   action as OpenRA-RL tool calls, one structure at a time, attacks with a
+   memory of enemy sightings and a map sweep) and a game driver
+   (`openra_play.py`). A 30-game-minute game takes 20-45 s of real time.
+   Found on the way:
+   * The pinned engine crashed headless when a GPS satellite launched (a
+     screen effect without a screen). `openra/patches/` fixes it and
+     `setup.sh` applies it.
+   * OpenRA-RL's default map (Singles) is mostly water: a land army can't
+     reach every enemy building, so games never end. Land maps are needed
+     (e.g. Ore Lord). The "beginner" AI doesn't build on Ore Lord; easy,
+     medium and normal do, and rush early.
+   * A hand-written rule policy on this executor loses to OpenRA's easy AI on
+     Ore Lord. So win/loss alone would show no difference between students.
+
+   Next: a continuous outcome as in 0 A.D. (win +1, loss −1, and at the time
+   limit the value killed minus lost, within ±0.5); a ladder of opponents
+   (a passive "dummy" AI, beginner on a map where it works, easy, ...); then
+   the A/B/C experiment.
 
 ## What runs where
 

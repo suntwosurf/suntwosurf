@@ -7,12 +7,14 @@
 #   OpenRA-RL 0.4.1                  yxc20089/OpenRA-RL @ 5dadd44 (2026-04-22)
 #   its engine, a fork of OpenRA     yxc20089/OpenRA    @ 9b271c1 (2026-03-25)
 #     = OpenRA's development branch of 2026-01-27 + 51 RL commits
+#     + our fixes in transfer/openra/patches/
 #
 # Needs: git, make, curl, python3 >= 3.10 with venv, and the native libraries
 # libsdl2-2.0-0 libopenal1 libfreetype6 liblua5.1-0 (Debian/Ubuntu package
 # names). The Red Alert art/sound files are not needed headless.
 set -euo pipefail
 
+HERE=$(dirname "$(realpath "$0")")
 ROOT=$(realpath -m "${1:-$HOME/openra-rl-env}")
 OPENRA_RL_COMMIT=5dadd449c912ac2d4021cc8ed84fc0b385b1543c
 ENGINE_COMMIT=9b271c1a5562a07deeb1c3f81d9a556cd563a676
@@ -55,6 +57,17 @@ export PATH=$DOTNET_ROOT:$PATH
 echo "== engine (yxc20089/OpenRA @ ${ENGINE_COMMIT:0:7})"
 fetch_commit https://github.com/yxc20089/OpenRA.git "$ENGINE_COMMIT" "$ROOT/engine"
 find "$ROOT/engine" -name '*.sh' -exec sed -i 's/\r$//' {} +
+# Our fixes on top of the pinned engine (patches/*.patch): e.g. headless games
+# crashed when a GPS satellite launched (a screen effect without a screen).
+shopt -s nullglob
+for patch in "$HERE"/patches/*.patch; do
+	if git -C "$ROOT/engine" apply --check "$patch" 2> /dev/null; then
+		git -C "$ROOT/engine" apply "$patch"
+		echo "   applied $(basename "$patch")"
+	elif ! git -C "$ROOT/engine" apply --reverse --check "$patch" 2> /dev/null; then
+		echo "patch $(basename "$patch") does not apply to this engine"; exit 1
+	fi
+done
 # No SKIP_PROTOC: the generated gRPC code checked into the fork is older than
 # this commit's .proto file, so it has to be generated (works on x86_64).
 make -C "$ROOT/engine" TARGETPLATFORM=unix-generic CONFIGURATION=Release > build.log 2>&1 \

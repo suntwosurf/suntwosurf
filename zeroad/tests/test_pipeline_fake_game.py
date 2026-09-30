@@ -84,7 +84,10 @@ def test_cli_on_fake_game(tmp_path, monkeypatch, capsys):
     assert main(["learn", "--game", "fake", "--generations", "2", "--workers", "3"]) == 0
     assert main(["evaluate", "--game", "fake", "--matches", "4", "--baseline", "--workers", "3"]) == 0
     out = capsys.readouterr().out
-    assert "learned" in out and "petra" in out
+    assert "learned" in out and "petra" in out and "map set 1" in out
+    assert "learned vs petra on the same maps" in out
+    assert main(["evaluate", "--game", "fake", "--matches", "2", "--seed", "77", "--workers", "2"]) == 0
+    assert "map set 77" in capsys.readouterr().out
     assert main(["show"]) == 0
     assert "learned settings" in capsys.readouterr().out
     assert main(["install-mod", "--game", "fake", "--remove-slots"]) == 0

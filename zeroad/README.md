@@ -100,7 +100,8 @@ on, an **economy first, fight later** style:
 Match by match: on 14 maps only the learned bot won, on 6 only Petra won
 (both won 15, both lost 13). A split this uneven happens by chance about 1
 time in 9 (sign test, p = 0.12), so the edge is **promising but not proven**;
-a larger evaluation (`--matches 200`) settles it.
+a larger evaluation on fresh maps settles it:
+`zadbot evaluate --config configs\many_cores.toml --baseline --matches 200 --seed 2`.
 
 ## How the learning works
 

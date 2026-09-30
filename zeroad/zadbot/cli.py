@@ -328,12 +328,13 @@ def cmd_evaluate(args) -> int:
     if args.baseline:
         variants["petra"] = "petra"
     n = args.matches or cfg.evaluate.matches
+    seed = cfg.evaluate.seed if args.seed is None else args.seed
     m = cfg.match
     log(f"evaluating {', '.join(variants)} vs {m.opponent} (difficulty {m.difficulty}): {n} matches each, "
-        f"seeds from {cfg.evaluate.seed} (not used in training)")
+        f"map set {seed} (not used in training)")
     runner = _runner(cfg, game, user_data, Path(args.state).parent, worker_games)
     try:
-        results = evaluate(cfg, runner, variants, n, cfg.evaluate.seed)
+        results = evaluate(cfg, runner, variants, n, seed)
     except IncompatibleGame as e:
         return _refused(e, user_data)
     out = Path(args.state).parent / "evaluate.json"
@@ -424,6 +425,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("evaluate", parents=[common], help="learned bot vs Petra on fresh seeds")
     s.add_argument("--state", default="runs/learner.json")
     s.add_argument("--matches", type=int, default=0)
+    s.add_argument("--seed", type=int, default=None,
+                   help="another set of maps (default: [evaluate] seed); use a new one to confirm a result")
     s.add_argument("--baseline", action="store_true", help="also plain Petra vs Petra on the same seeds")
     s.set_defaults(func=cmd_evaluate)
 

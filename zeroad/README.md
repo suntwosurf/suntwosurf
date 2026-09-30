@@ -147,19 +147,32 @@ If `check` does not find the game, pass `--game "D:\Games\0 A.D. Empires Ascenda
 
 ```powershell
 zadbot finish-test --games 2                       # does it finish full games?
-zadbot learn --generations 10 --workers 3          # 8 candidates x 2 matches per generation
+zadbot learn --generations 10                      # 8 candidates x 2 matches per generation
 zadbot show                                        # learning curve + learned settings
-zadbot evaluate --baseline --workers 3             # learned vs Petra, and Petra vs Petra
+zadbot evaluate --baseline                         # learned vs Petra, and Petra vs Petra
 zadbot install-mod --remove-slots                  # put the learned bot into the game
 ```
 
-`learn` saves after every generation (`runs\learner.json`). `Ctrl+C` stops it,
-and running it again resumes. Every match is saved in `runs\matches\` together
-with its replay folder.
+`learn` saves after every generation (`runs\learner.json`). `Ctrl+C` stops it
+(and the game it is running), and running it again resumes. Every match is
+saved in `runs\matches\` together with its replay folder.
+
+**One game at a time on Windows.** 0 A.D. opens its game files on Windows so
+that no other program can read them while it runs. A second copy of the
+game then misses `mod.zip` or `public.zip` and fails. So on Windows zadbot runs
+one game at a time (`--workers` is ignored), and it refuses to start while
+0 A.D. is already running. Don't play 0 A.D. while zadbot runs. If a game is
+left over from an earlier run, end it with:
+
+```powershell
+Stop-Process -Name pyrogenesis -Force
+```
+
+On Linux, games run in parallel (`--workers`, about 1 CPU core each).
 
 Run time: a headless match runs much faster than real time, but Petra's AI is
 CPU-heavy. Run one `finish-test` first to see how long a match takes on your
-PC. With `--workers 3`, a generation is 16 matches.
+PC. A generation is 16 matches.
 
 ### 5. Play against it
 
@@ -174,7 +187,7 @@ levels work as for Petra.
 
 | key | default | |
 |---|---|---|
-| `[game] workers` | 2 | headless games at a time (about 1 CPU core each) |
+| `[game] workers` | 2 | headless games at a time (about 1 CPU core each); always 1 on Windows |
 | `[match] maps`, `size` | mainland, 128 | small maps give short games |
 | `[match] difficulty` | 3 | both players; 3 = Medium, no AI bonus |
 | `[match] time_limit` | 30 | minutes, then the score decides; 0 = until conquest |
@@ -233,7 +246,7 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 52 tests.
+  game version. 55 tests.
 
 Not tested yet (needs the game running):
 * Real headless matches: the finish test and learning. The command line
@@ -243,4 +256,6 @@ Not tested yet (needs the game running):
   `workers` and generation sizes are first guesses.
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
-  writes on every OS. Live progress lines appear only on Linux/macOS.
+  writes on every OS, and errors from the game's own log
+  (`%LOCALAPPDATA%\0ad\logs\interestinglog_<time>_<pid>.html`). Live
+  progress lines appear only on Linux/macOS.

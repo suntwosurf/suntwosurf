@@ -67,7 +67,8 @@ class MatchRunner:
         slot = self._slots.get()
         try:
             spec = self._spec(job, slot)
-            result = run_match(self.game, spec, self.user_data, timeout=self.cfg.game.match_timeout)
+            result = run_match(self.game, spec, self.user_data, timeout=self.cfg.game.match_timeout,
+                               startup_timeout=self.cfg.game.startup_timeout)
         finally:
             self._slots.put(slot)
         if result.status == "incompatible":

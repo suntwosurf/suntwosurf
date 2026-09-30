@@ -29,6 +29,7 @@ from .game import GameInstall
 from .modinstall import MOD_NAME, ensure_time_limit
 
 TURN_SECONDS = 0.2  # DEFAULT_TURN_LENGTH in the engine
+POLL_SECONDS = 1.0
 
 _TURN_RE = re.compile(r"^Turn (\d+) \(")
 _REPLAY_RE = re.compile(r"Replay written to '(.+)'")
@@ -269,27 +270,32 @@ def _matches_spec(attribs: dict, spec: MatchSpec) -> bool:
     )
 
 
+def _replays_of(replays_root: Path, spec: MatchSpec, since: float, hint: str | None = None):
+    """Unclaimed replay folders of ``spec`` started after ``since``, newest first.
+    Every version folder is searched, because the engine names it after its
+    serialization version, which a patch release may keep (lib/build_version.h)."""
+    candidates = []
+    if hint:
+        candidates.append(Path(hint))
+    if replays_root.is_dir():
+        dirs = [d for d in replays_root.glob("*/*") if d.is_dir() and d.stat().st_mtime >= since - 5]
+        candidates += sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in candidates:
+        if str(d.resolve()) in _CLAIMED:
+            continue
+        attribs = read_start_line(d)
+        if attribs is not None and _matches_spec(attribs, spec):
+            yield d
+
+
 def find_replay(replays_root: Path, spec: MatchSpec, since: float, hint: str | None = None) -> Path | None:
     """The replay folder of this match (``replays/<version>/<date>_<n>/``): the
     newest one started after ``since`` whose settings match, and not already
-    taken by a parallel match. Every version folder is searched, because the
-    engine names it after its serialization version, which a patch release
-    may keep (lib/build_version.h)."""
+    taken by a parallel match."""
     with _CLAIM_LOCK:
-        candidates = []
-        if hint:
-            candidates.append(Path(hint))
-        if replays_root.is_dir():
-            dirs = [d for d in replays_root.glob("*/*") if d.is_dir() and d.stat().st_mtime >= since - 5]
-            candidates += sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)
-        for d in candidates:
-            key = str(d.resolve())
-            if key in _CLAIMED:
-                continue
-            attribs = read_start_line(d)
-            if attribs is not None and _matches_spec(attribs, spec):
-                _CLAIMED.add(key)
-                return d
+        for d in _replays_of(replays_root, spec, since, hint):
+            _CLAIMED.add(str(d.resolve()))
+            return d
     return None
 
 
@@ -343,8 +349,14 @@ def run_match(
     user_data: Path,
     timeout: float = 3 * 3600.0,
     on_event: Callable[[dict], None] | None = None,
+    startup_timeout: float = 300.0,
 ) -> MatchResult:
-    """Play one match to the end (or the time limit / ``timeout``) and read its result."""
+    """Play one match to the end (or the time limit / ``timeout``) and read its result.
+
+    A game that has not started the match (no replay folder) after
+    ``startup_timeout`` seconds is stuck and gets stopped. The game is also
+    stopped when this function is left early (Ctrl+C, an error): on Windows
+    a leftover game keeps the game files locked for every later game."""
     victory = victory_conditions(user_data, spec)
     cmd = build_command(game, spec, victory)
     env = dict(os.environ, ZADBOT_USER_DATA=str(user_data))
@@ -369,13 +381,28 @@ def run_match(
 
     t = threading.Thread(target=reader, daemon=True)
     t.start()
-    timed_out = False
+    timed_out = stuck = False
+    match_started = False
     try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        proc.kill()
-        proc.wait()
+        while True:
+            try:
+                proc.wait(timeout=POLL_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            elapsed = time.time() - started
+            if elapsed > timeout:
+                timed_out = True
+                break
+            if not match_started and elapsed > startup_timeout:
+                match_started = next(_replays_of(user_data / "replays", spec, started), None) is not None
+                if not match_started:
+                    stuck = True
+                    break
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
     t.join(timeout=10)
     wall = time.time() - started
 
@@ -410,6 +437,8 @@ def run_match(
         result.status = "finished" if result.winners else "failed"
         if not result.winners:
             result.errors.append("the replay has no winner")
+    elif stuck:
+        result.errors.insert(0, f"the game did not start the match within {startup_timeout:.0f} s, so it was stopped")
     elif timed_out:
         result.status = "timeout"
         result.errors.append(f"stopped after {timeout / 60:.0f} min of real time")

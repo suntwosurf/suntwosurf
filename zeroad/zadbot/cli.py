@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import GAME_VERSION
 from .config import BotConfig, load_config
-from .game import GameInstall, find_game, user_data_dir
+from .game import GameInstall, find_game, one_game_at_a_time, running_game_processes, user_data_dir
 
 
 def log(msg: str) -> None:
@@ -47,6 +47,25 @@ def _game(cfg: BotConfig) -> tuple[GameInstall, Path]:
     if problems:
         raise SystemExit("\n".join(["cannot run:"] + ["  " + p for p in problems]))
     return game, _user_data(cfg, game)
+
+
+def _playing(cfg: BotConfig) -> tuple[BotConfig, GameInstall, Path]:
+    """_game() for commands that start games. On Windows only one game can
+    run at a time (see game.one_game_at_a_time), so refuse to start next to
+    a running one and use one worker."""
+    game, user_data = _game(cfg)
+    if one_game_at_a_time(game):
+        running = running_game_processes()
+        if running:
+            raise SystemExit(
+                f"0 A.D. is already running (pyrogenesis.exe, process {', '.join(map(str, running))}).\n"
+                "On Windows a second copy cannot read the game files while it runs. Close the game,\n"
+                "or end games left over from an earlier run with:  Stop-Process -Name pyrogenesis -Force"
+            )
+        if cfg.game.workers > 1:
+            log("note: on Windows 0 A.D. locks its game files, so zadbot runs one game at a time")
+            cfg = dataclasses.replace(cfg, game=dataclasses.replace(cfg.game, workers=1))
+    return cfg, game, user_data
 
 
 def _refused(e: Exception, user_data: Path) -> int:
@@ -137,7 +156,7 @@ def cmd_match(args) -> int:
     from .pipeline import IncompatibleGame
 
     cfg = _config(args)
-    game, user_data = _game(cfg)
+    cfg, game, user_data = _playing(cfg)
     players = [PlayerSpec.parse(args.p1), PlayerSpec.parse(args.p2)]
     players[0].civ, players[1].civ = args.civ1, args.civ2
     spec = MatchSpec(players=players, map=args.map, size=args.size, seed=args.seed, ai_seed=args.seed,
@@ -159,7 +178,7 @@ def cmd_finish_test(args) -> int:
     from .pipeline import IncompatibleGame, finish_test
 
     cfg = _config(args)
-    game, user_data = _game(cfg)
+    cfg, game, user_data = _playing(cfg)
     bot, opp = PlayerSpec.parse(args.bot), PlayerSpec.parse(args.opponent)
     log(f"finish test: {bot.label()} vs {opp.label()}, {args.games} full game(s) on {args.map} "
         f"(size {args.size}), no time limit, {cfg.game.workers} at a time")
@@ -188,7 +207,7 @@ def cmd_learn(args) -> int:
     from .pipeline import IncompatibleGame, learn
 
     cfg = _config(args)
-    game, user_data = _game(cfg)
+    cfg, game, user_data = _playing(cfg)
     state = Path(args.state)
     if state.is_file():
         learner = CrossEntropyLearner.load(state, cfg.learn, cfg.match)
@@ -219,7 +238,7 @@ def cmd_evaluate(args) -> int:
     from .report import evaluation_report
 
     cfg = _config(args)
-    game, user_data = _game(cfg)
+    cfg, game, user_data = _playing(cfg)
     variants: dict = {}
     if Path(args.state).is_file():
         variants["learned"] = load_centre(args.state)

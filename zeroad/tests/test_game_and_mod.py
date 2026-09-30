@@ -160,3 +160,13 @@ def test_other_layouts(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(FileNotFoundError, match="has no pyrogenesis"):
         find_game(str(tmp_path / "empty"))
+
+
+def test_parse_tasklist():
+    from zadbot.game import parse_tasklist
+
+    out = ('"pyrogenesis.exe","28784","Console","1","1,204,332 K"\r\n'
+           '"python.exe","100","Console","1","50,000 K"\r\n'
+           '"pyrogenesis.exe","31337","Console","1","900,000 K"\r\n')
+    assert parse_tasklist(out) == [28784, 31337]
+    assert parse_tasklist("INFO: No tasks are running which match the specified criteria.\r\n") == []

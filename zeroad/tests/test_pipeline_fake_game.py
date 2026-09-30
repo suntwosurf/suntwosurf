@@ -140,3 +140,32 @@ def test_cli_explains_refused_mod(tmp_path, monkeypatch, capsys):
     assert main(["finish-test", "--game", "fake", "--games", "1", "--workers", "1"]) == 1
     out = capsys.readouterr().out
     assert "did not accept the zadbot mod" in out and "incompatible mods: zadbot" in out
+
+
+def test_stuck_game_is_stopped(fake_cfg, monkeypatch):
+    import time
+
+    monkeypatch.setenv("ZADBOT_FAKE_HANG", "60")
+    user = Path(fake_cfg.game.user_data)
+    ensure_installed(user)
+    spec = MatchSpec(players=[PlayerSpec("petra", 5), PlayerSpec("petra", 1)], seed=6, ai_seed=6, time_limit=0)
+    t0 = time.time()
+    r = run_match(fake_install(), spec, user, timeout=60, startup_timeout=1.5)
+    assert time.time() - t0 < 20
+    assert r.status == "failed" and "did not start the match" in r.errors[0]
+
+
+def test_windows_one_game_at_a_time(tmp_path, monkeypatch, capsys):
+    from zadbot import cli
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "one_game_at_a_time", lambda game: True)
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [4321])
+    with pytest.raises(SystemExit, match="4321") as e:
+        main(["finish-test", "--game", "fake", "--games", "1"])
+    assert "Stop-Process -Name pyrogenesis" in str(e.value)
+
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [])
+    assert main(["finish-test", "--game", "fake", "--games", "2", "--workers", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "one game at a time" in out and "1 at a time" in out

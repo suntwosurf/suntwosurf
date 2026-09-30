@@ -5,8 +5,9 @@
 path = ""            # pyrogenesis(.exe) or the 0 A.D. folder; "" = search the usual places
                      # (Windows: %LOCALAPPDATA%\0 A.D. Empires Ascendant); "fake" = no game
 user_data = ""       # only if your 0 A.D. keeps mods/replays somewhere unusual
-workers = 2          # headless games at a time (each uses ~1 CPU core and ~1 GB RAM)
+workers = 2          # headless games at a time (each uses ~1 CPU core and ~1 GB RAM); always 1 on Windows
 match_timeout = 10800.0   # s of real time before a match is stopped
+startup_timeout = 300.0   # s for a game to start its match before it counts as stuck
 
 [match]              # the 1 v 1 matches the bot learns from and is tested on
 maps = ["random/mainland"]

@@ -177,6 +177,11 @@ def _play(a: dict[str, list[str]], user_data: Path, log: _Log) -> int:
         log.error("the fake game only does -autostart-nonvisual matches")
         return 1
 
+    hang = os.environ.get("ZADBOT_FAKE_HANG")
+    if hang:  # for tests: stuck while loading, never starts the match
+        time.sleep(float(hang))
+        return 0
+
     fail = os.environ.get("ZADBOT_FAKE_FAIL")
     if fail:  # for tests: quit during loading, like a broken setup
         log.error(fail)

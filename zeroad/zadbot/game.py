@@ -3,8 +3,10 @@ data (mods, replays). Nothing here starts the game."""
 
 from __future__ import annotations
 
+import csv
 import json
 import os
+import subprocess
 import sys
 import zipfile
 from dataclasses import dataclass, field
@@ -220,6 +222,31 @@ def default_user_data() -> Path:
         return Path.home() / "Library" / "Application Support" / "0ad"
     xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     return Path(xdg) / "0ad"
+
+
+def one_game_at_a_time(game: GameInstall) -> bool:
+    """On Windows the engine opens its game files so that no other program
+    may read them (_SH_DENYRD in lib/sysdep/os/win/wposix/wfilesystem.cpp).
+    A second copy of the game then silently misses mod.zip or public.zip,
+    so only one game can run at a time."""
+    return sys.platform == "win32" and not game.fake
+
+
+def running_game_processes() -> list[int]:
+    """Process ids of running pyrogenesis.exe (Windows only; [] elsewhere)."""
+    if sys.platform != "win32":
+        return []
+    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq pyrogenesis.exe", "/FO", "CSV", "/NH"],
+                         capture_output=True, text=True).stdout
+    return parse_tasklist(out)
+
+
+def parse_tasklist(out: str) -> list[int]:
+    pids = []
+    for row in csv.reader(out.splitlines()):
+        if len(row) > 1 and row[0].lower() == "pyrogenesis.exe" and row[1].isdigit():
+            pids.append(int(row[1]))
+    return pids
 
 
 def default_logs_dir() -> Path:

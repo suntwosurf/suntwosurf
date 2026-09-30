@@ -29,8 +29,9 @@ class GameConfig:
     path: str = ""
     # Where 0 A.D. keeps mods and replays. "" = the game's default for this OS.
     user_data: str = ""
-    workers: int = 2  # matches run in parallel (each is one headless game)
+    workers: int = 2  # matches run in parallel (each is one headless game); always 1 on Windows
     match_timeout: float = 3 * 3600.0  # s of real time before a match is stopped
+    startup_timeout: float = 300.0  # s for a game to start its match before it counts as stuck
 
 
 @dataclass

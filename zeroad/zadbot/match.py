@@ -29,6 +29,8 @@ from typing import Callable
 from .game import GameInstall
 from .modinstall import MOD_NAME, ensure_time_limit
 
+RECORDER_AI = "zadbot_rec"  # plain Petra that records (mod/zadbot/simulation/ai/zadbot_rec)
+
 TURN_SECONDS = 0.2  # DEFAULT_TURN_LENGTH in the engine
 POLL_SECONDS = 1.0
 
@@ -100,6 +102,8 @@ class MatchResult:
     errors: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
     game_log: str | None = None  # the game's interestinglog (errors and warnings)
+    # ZADREC lines of recorder AIs (zadbot_rec), from the game's mainlog; not saved with the match
+    recording: list[dict] = field(default_factory=list)
 
     @property
     def finished(self) -> bool:
@@ -112,7 +116,9 @@ class MatchResult:
         raise KeyError(pid)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("recording")
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "MatchResult":
@@ -352,6 +358,25 @@ def read_game_log(logs_dir: Path, pid: int) -> tuple[Path | None, list[str]]:
     return files[-1], lines
 
 
+def read_recording(logs_dir: Path, pid: int, remove: bool = True) -> list[dict]:
+    """The ZADREC lines recorder AIs wrote to this game's mainlog_<time>_<pid>.html
+    (on every OS). The file is removed once read (``remove``): it is written
+    for every game and grows to a few hundred kB."""
+    if not logs_dir.is_dir():
+        return []
+    records = []
+    for f in sorted(logs_dir.glob(f"mainlog_*_{pid}.html"), key=lambda f: f.stat().st_mtime)[-1:]:
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"<p>ZADREC (.*?)</p>", text):
+            try:
+                records.append(json.loads(html.unescape(m.group(1))))
+            except json.JSONDecodeError:
+                continue
+        if remove and records:
+            f.unlink(missing_ok=True)
+    return records
+
+
 def parse_stdout_line(line: str, state: dict) -> None:
     """Collect what the game prints (Linux/macOS): progress, errors, ZADBOT events."""
     m = _TURN_RE.match(line)
@@ -444,7 +469,8 @@ def run_match(
     wall = time.time() - started
 
     # The game's own log: on Windows the only place its errors appear.
-    log_file, log_lines = read_game_log(game.logs_dir or user_data / "logs", proc.pid)
+    logs_dir = game.logs_dir or user_data / "logs"
+    log_file, log_lines = read_game_log(logs_dir, proc.pid)
     for line in log_lines:
         if line not in state.get("errors", []):
             parse_stdout_line(line, state)
@@ -452,6 +478,8 @@ def run_match(
     result = MatchResult(spec=spec.to_dict(), status="failed", wall_time=wall,
                          errors=list(state.get("errors", [])), log_tail=list(tail),
                          game_log=str(log_file) if log_file else None)
+    if any(p.ai == RECORDER_AI for p in spec.players):
+        result.recording = read_recording(logs_dir, proc.pid)
     result.game_time = state.get("turn", 0) * TURN_SECONDS
     if "incompatible" in state:
         result.status = "incompatible"

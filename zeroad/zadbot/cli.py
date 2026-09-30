@@ -1,6 +1,7 @@
 """Command line: ``zadbot <command> --help`` for details.
 
 check -> install-mod -> finish-test (does the bot finish a game?) -> learn -> evaluate -> show
+record: Petra vs Petra games as teacher data for concept learning (transfer/DESIGN.md)
 watch: open the game and see the learned bot play (also while learn runs)
 """
 
@@ -282,6 +283,40 @@ def cmd_finish_test(args) -> int:
     return 0 if len(finished) == len(results) else 1
 
 
+def cmd_record(args) -> int:
+    from .pipeline import IncompatibleGame, record, record_specs
+
+    cfg = _config(args)
+    try:
+        difficulties = [int(x) for x in args.difficulties.split(",")]
+        behaviors = [x.strip() for x in args.behaviors.split(",") if x.strip()]
+        sizes = [int(x) for x in args.sizes.split(",")]
+    except ValueError:
+        log("--difficulties and --sizes take numbers, e.g. --difficulties 2,3,4,5 --sizes 128,192")
+        return 1
+    cfg, game, user_data, worker_games = _playing(cfg)
+    specs = record_specs(cfg, args.games, args.seed, difficulties, behaviors, sizes, args.time_limit)
+    out = Path(args.out)
+    log(f"recording {args.games} games of Petra vs Petra (difficulty {args.difficulties}, {', '.join(behaviors)}; "
+        f"map size {args.sizes}; {args.time_limit} min limit), {cfg.game.workers} at a time, into {out}")
+    runner = _runner(cfg, game, user_data, out, worker_games)
+    try:
+        summary = record(runner, specs, out, args.seed, log)
+    except IncompatibleGame as e:
+        return _refused(e, user_data)
+    log("")
+    log(f"recorded {summary['games']} games ({summary['unfinished']} not finished), "
+        f"{summary['steps']} steps of 10 s over both players")
+    if summary["actions"]:
+        log("Petra's decisions: " + ", ".join(f"{k} {v}" for k, v in sorted(summary["actions"].items())))
+    if summary["no_recording"]:
+        log(f"{summary['no_recording']} games wrote no recording (see the errors above)")
+    for e in summary["errors"][:5]:
+        log(f"recorder error: {e}")
+    ok = (summary["games"] or summary["done_before"] == len(specs)) and not summary["errors"]
+    return 0 if ok else 1
+
+
 def cmd_learn(args) -> int:
     from .learner import CrossEntropyLearner
     from .pipeline import IncompatibleGame, learn
@@ -445,6 +480,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seed", type=int, default=1)
     s.add_argument("--out", default="runs")
     s.set_defaults(func=cmd_finish_test)
+
+    s = sub.add_parser("record", parents=[common],
+                       help="record Petra vs Petra games as teacher data for concept learning (transfer/DESIGN.md)")
+    s.add_argument("--games", type=int, default=20)
+    s.add_argument("--seed", type=int, default=1, help="another seed gives other games; the same one resumes")
+    s.add_argument("--difficulties", default="2,3,4,5", help="Petra difficulties to pick from")
+    s.add_argument("--behaviors", default="balanced,aggressive,defensive")
+    s.add_argument("--sizes", default="128,192", help="map sizes to pick from")
+    s.add_argument("--time-limit", type=int, default=45, help="minutes, then the score decides (0 = until conquest)")
+    s.add_argument("--out", default="runs/record")
+    s.set_defaults(func=cmd_record)
 
     s = sub.add_parser("learn", parents=[common], help="learn Petra's settings by playing against Petra")
     s.add_argument("--generations", type=int, default=5)

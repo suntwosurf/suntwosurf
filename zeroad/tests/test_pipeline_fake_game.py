@@ -241,3 +241,26 @@ def test_watch_installs_learned_bot_and_opens_the_game(tmp_path, monkeypatch, ca
     monkeypatch.setattr(cli, "running_game_processes", lambda: [(5, copy), (6, r"C:\0ad\binaries\system\pyrogenesis.exe")])
     with pytest.raises(SystemExit, match="already open"):
         main(["watch", "--game", "fake"])
+
+
+def test_record_teacher_games(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert main(["record", "--game", "fake", "--games", "3", "--workers", "2", "--difficulties", "2,5"]) == 0
+    out = capsys.readouterr().out
+    assert "recorded 3 games" in out and "Petra's decisions:" in out
+    files = sorted((tmp_path / "runs/record").glob("*.jsonl"))
+    assert [f.name for f in files] == ["1-0.jsonl", "1-1.jsonl", "1-2.jsonl"]
+    lines = [json.loads(line) for line in files[0].read_text().splitlines()]
+    game = lines[0]["game"]
+    assert [p["ai"] for p in game["spec"]["players"]] == ["zadbot_rec", "zadbot_rec"]
+    assert {p["difficulty"] for p in game["spec"]["players"]} <= {2, 5} and game["winners"]
+    headers = [r for r in lines[1:] if r.get("header")]
+    assert sorted(h["p"] for h in headers) == [1, 2] and "income" in headers[0]["features"]
+    assert sum("t" in r for r in lines) > 100
+    # the game's main logs are read and removed; the match files don't carry the recording
+    assert not list((tmp_path / "runs/fake-user-data/logs").glob("mainlog_*"))
+    match = json.loads(next((tmp_path / "runs/record/matches").glob("*.json")).read_text())
+    assert "recording" not in match
+    # the same seed resumes: nothing left to play
+    assert main(["record", "--game", "fake", "--games", "3", "--workers", "2"]) == 0
+    assert "3 of 3 games already recorded" in capsys.readouterr().out

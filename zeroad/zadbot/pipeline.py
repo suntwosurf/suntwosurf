@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import queue
+import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +21,7 @@ from typing import Callable
 from .config import BotConfig
 from .game import GameInstall
 from .learner import CrossEntropyLearner, Scenario, make_scenarios
-from .match import MatchResult, MatchSpec, PlayerSpec, outcome, run_match
+from .match import RECORDER_AI, MatchResult, MatchSpec, PlayerSpec, outcome, run_match
 from .modinstall import write_slot
 from .params import unit_to_values
 
@@ -311,3 +312,60 @@ def finish_test(
         spec = MatchSpec(players=players, map=map_name, size=size, seed=seed + i, ai_seed=seed + i, time_limit=0)
         jobs.append(Job(spec=spec, tag={"finish": i}))
     return runner.run_all(jobs)
+
+
+# ------------------------------------------------------------------ recording (teacher data)
+def record_specs(
+    cfg: BotConfig, games: int, seed: int, difficulties: list[int], behaviors: list[str], sizes: list[int],
+    time_limit: int,
+) -> list[MatchSpec]:
+    """Petra vs Petra, both recording (transfer/DESIGN.md): varied difficulty,
+    behaviour, civilisations, maps, map sizes and seeds, so the teacher data
+    covers many situations rather than one opening played many times."""
+    rng = random.Random(seed)
+    specs = []
+    for i in range(games):
+        players = [PlayerSpec(ai=RECORDER_AI, difficulty=rng.choice(difficulties), behavior=rng.choice(behaviors),
+                              civ=rng.choice(cfg.match.civs)) for _ in range(2)]
+        specs.append(MatchSpec(players=players, map=cfg.match.maps[i % len(cfg.match.maps)], size=rng.choice(sizes),
+                               seed=rng.randrange(1, 1_000_000), ai_seed=rng.randrange(1, 1_000_000),
+                               time_limit=time_limit))
+    return specs
+
+
+def record(runner: MatchRunner, specs: list[MatchSpec], out_dir: Path, seed: int, log: Log) -> dict:
+    """Play ``specs`` and save each game's recording as ``<out_dir>/<seed>-<i>.jsonl``:
+    one line about the game (players, result), then the recorder's lines.
+    Games whose file exists are skipped, so an interrupted run resumes."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    todo = [(i, s) for i, s in enumerate(specs) if not (out_dir / f"{seed}-{i}.jsonl").is_file()]
+    if len(todo) < len(specs):
+        log(f"{len(specs) - len(todo)} of {len(specs)} games already recorded in {out_dir}; playing the rest")
+    jobs = [Job(spec=s, tag={"record": f"{seed}-{i}"}) for i, s in todo]
+    summary = {"games": 0, "unfinished": 0, "steps": 0, "no_recording": 0, "errors": [], "actions": {},
+               "done_before": len(specs) - len(todo)}
+    for (i, spec), result in zip(todo, runner.run_all(jobs)):
+        errors = [r for r in result.recording if "error" in r]
+        steps = [r for r in result.recording if "t" in r]
+        summary["errors"] += [f"{seed}-{i} P{r.get('p')}: {r['error']}" for r in errors]
+        if not steps:
+            summary["no_recording"] += 1
+            continue
+        game = {
+            "spec": spec.to_dict(), "status": result.status, "reason": result.reason, "winners": result.winners,
+            "game_time": result.game_time, "players": result.players, "replay": result.replay_dir,
+        }
+        path = out_dir / f"{seed}-{i}.jsonl"
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"game": game}) + "\n")
+            for r in result.recording:
+                fh.write(json.dumps(r, separators=(",", ":")) + "\n")
+        tmp.replace(path)
+        summary["games"] += 1
+        summary["unfinished"] += not result.finished
+        summary["steps"] += len(steps)
+        for r in steps:
+            for name, n in r.get("a", {}).items():
+                summary["actions"][name] = summary["actions"].get(name, 0) + n
+    return summary

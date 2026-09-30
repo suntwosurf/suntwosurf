@@ -108,3 +108,36 @@ def test_styles_on_real_petra(petra_root, style):
     if style == "boom":
         assert learned["Economy.targetNumWorkers"] > plain["Economy.targetNumWorkers"]
         assert learned["Military.popForBarracks1"] > plain["Military.popForBarracks1"]
+
+
+def test_recorder_on_real_petra(petra_root):
+    """The recorder's features and decisions on a made-up game state (check_recorder.mjs), with
+    Petra's real queue classes: every value below was worked out by hand."""
+    if petra_root is None:
+        pytest.skip("needs the game's Petra: set ZADBOT_GAME or ZADBOT_PETRA_ROOT")
+    env = dict(os.environ, ZADBOT_JS_ROOTS=os.pathsep.join([str(MOD_ROOT), str(petra_root)]))
+    r = subprocess.run([NODE, "--import", "./register.mjs", "check_recorder.mjs"], cwd=JS_DIR, env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["prototypesUntouched"] and out["otherQueuePlans"] == 1
+    lines = [json.loads(line[len("ZADREC "):]) for line in out["logged"]]
+    assert all(line.startswith("ZADREC ") for line in out["logged"])
+    header, first, second = lines
+    assert header["header"] and header["civ"] == "athen" and header["features"] == out["names"]["features"]
+    f = dict(zip(header["features"], first["f"]))
+    assert f == {
+        "t_min": 0.167, "stock": 3, "income": 0, "spending": 0, "gatherers": 2, "workers": 3, "eco_buildings": 2,
+        "supply_headroom": 0.25, "production_buildings": 1, "production_busy": 1, "bases": 1, "army_count": 2,
+        "army_value": 2.5, "defenses": 1, "tech": 0.5, "enemy_army_seen": 1, "enemy_buildings_seen": 1,
+        "killed_value": 0.8, "lost_value": 0.5, "threat_home": 1, "explored": 0.25,
+    }
+    assert dict(zip(header["privileged"], first["x"])) == {
+        "enemy_army_value": 2.2, "enemy_buildings": 2, "enemy_stock": 7, "enemy_income": 0}
+    assert first["a"] == {"TRAIN_WORKER": 5, "BUILD_SUPPLY": 1, "TECH_UP": 1, "TRAIN_ARMY": 4, "ATTACK": 1}
+    f2 = dict(zip(header["features"], second["f"]))
+    assert (f2["income"], f2["spending"]) == (36, 30)  # per minute: 600 gathered, stock +100 in 10 s
+    assert second["a"] == {"DEFEND": 1}
+    assert out["planActions"][:10] == ["TRAIN_WORKER", "TRAIN_WORKER", "TRAIN_ARMY", "TRAIN_ARMY", "BUILD_SUPPLY",
+                                       "BUILD_ECONOMY", "BUILD_ECONOMY", "BUILD_PRODUCTION", "BUILD_DEFENSE", "EXPAND"]
+    assert out["planActions"][10:] == [None, None]

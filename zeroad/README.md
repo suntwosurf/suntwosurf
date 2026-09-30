@@ -334,6 +334,31 @@ You can also set it up yourself: *Settings → Mod Selection*, enable
 (`zadbot install-mod` puts the latest learned settings there). Difficulty
 levels work as for Petra.
 
+### 6. Record teacher data (concept transfer to OpenRA)
+
+The next goal is a student that learns RTS *concepts* from Petra and takes
+them to OpenRA (Red Alert): see [transfer/DESIGN.md](../transfer/DESIGN.md).
+Its teacher data are Petra vs Petra games, recorded by the AI
+**zadbot recorder (plain Petra)**. That is Petra, playing unchanged, which
+writes what it sees and decides every 10 s of game time.
+
+```powershell
+git pull
+zadbot record --config configs\many_cores.toml --games 2       # check first: takes a few minutes
+zadbot record --config configs\many_cores.toml --games 1000    # then many; about 1-2 hours
+```
+
+* Each game picks Petra's difficulty (2-5) and behaviour for both players,
+  the civilisations, the map size (128 or 192) and the seeds, so the data
+  covers many situations. Games end by conquest or after 45 game-minutes
+  (`--time-limit`).
+* The recordings go to `runs\record\<seed>-<n>.jsonl`, one file per game
+  (about 150 kB). Running the same command again resumes; `--seed 2` gives
+  another 1000 games.
+* The first run should end with `recorded 2 games`, a line **Petra's
+  decisions: ...** listing all the kinds of decisions, and no
+  `recorder error`. If it shows one, paste it here.
+
 ## Configuration
 
 `configs/default.toml` lists every setting with its default. Use it with
@@ -377,6 +402,8 @@ zadbot/
     mod.json                               depends on 0ad=0.28.0
     simulation/ai/zadbot/learned.js        Petra + learned settings (no Petra code copied)
     simulation/ai/zadbot/_zadbot.js, params.js, data.json
+    simulation/ai/zadbot/rts.js, recorder.js   shared RTS features + the Petra recorder
+    simulation/ai/zadbot_rec/              the AI "zadbot recorder (plain Petra)"
     maps/scripts/ZadbotReport.js           per-minute stats, time limit, end result
     simulation/data/settings/victory_conditions/zadbot_report.json
   game.py        find the game, its version, user data folder
@@ -387,7 +414,7 @@ zadbot/
   learner.py     cross-entropy search over the settings
   pipeline.py    parallel matches for learning, evaluation, finish test
   fakegame.py    stand-in game for trying without 0 A.D.
-  cli.py         zadbot check | install-mod | match | finish-test | learn | evaluate | show | watch
+  cli.py         zadbot check | install-mod | match | finish-test | learn | evaluate | show | watch | record
 configs/default.toml
 tests/           pytest; tests/js/ runs the mod's JavaScript under Node.js
 ```
@@ -399,12 +426,16 @@ Tested:
   0.28.0 release), at difficulties 1, 3 and 5, including that the learned
   personality drives Petra's own derived settings, and that each style
   (`rush`, `boom`, `turtle`) changes what it should.
+* The recorder on the real 0.28.0 Petra modules with a made-up game state:
+  every feature and decision checked by hand, and Petra's shared code left
+  untouched.
 * `ZadbotReport.js` in a mocked simulation: per-minute stats, the time-limit
   decision including ties, one end line after conquest, and the summary-screen
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, the style comparison,
-  resume, and refusing another game version. 76 tests.
+  recording teacher games, resume, and refusing another game version.
+  78 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 * The first full learning run and its evaluation on the real game (see
@@ -415,6 +446,8 @@ Not shown:
   Petra's 50 %, +3 points (95 % range -7 to +13), i.e. no clear difference.
 * Whether playing styles matter in real games: `evaluate --settings` is
   tested on the fake game only so far.
+* `record` in the real game: tested with Petra's modules and the fake game,
+  not yet in a real match.
 
 Limits:
 * On Windows the game sends its console text to the debugger rather than to

@@ -33,13 +33,14 @@ reused. The learner is replaced by a student that looks at the game state.
 
 ```
  game state ──▶ encoder (per game) ──▶ shared features ──▶ concepts ──▶ policy ──▶ macro action ──▶ executor (per game) ──▶ game commands
-               0 A.D.: JS in the bot     ~25 numbers       ~7 numbers    shared      1 of ~11         0 A.D.: Petra's machinery
-               OpenRA: Python            (same meaning      (bottleneck,  core                        OpenRA: scripted, Python
+               0 A.D.: JS in the bot     21 numbers        ~7 numbers    shared      how many of      0 A.D.: Petra's machinery
+               OpenRA: Python            (same meaning      (bottleneck,  core        each of 10       OpenRA: scripted, Python
                                           in both games)     supervised)
 ```
 
-* **Decision step:** every 10 s of game time. The student chooses the next
-  macro action (what to invest in, when to attack or defend). Moment-to-moment
+* **Decision step:** every 10 s of game time. The student decides the macro
+  actions for the next 10 s and how many of each: say 3 workers, a house and an
+  attack. Moment-to-moment
   control (placing buildings, sending gatherers, fighting) stays with a
   scripted executor in each game.
 * **Shared core** (concepts + policy) is trained in 0 A.D. In OpenRA it is
@@ -95,9 +96,10 @@ explicit, checkable and shared.
 
 ### Macro actions
 
+A step holds a count for each action (none at all is a valid step).
+
 | action | 0 A.D. (via Petra's queues and plans) | OpenRA (scripted executor) |
 |---|---|---|
-| NOOP | – | – |
 | TRAIN_WORKER | women / gatherers | harvester |
 | TRAIN_ARMY | soldiers | infantry / vehicles |
 | BUILD_SUPPLY | house | power plant |
@@ -173,6 +175,11 @@ G = 0, 50, 200, 1000:
 Plus two reference points: random macro actions, and a hand-written rule
 policy on the same executor.
 
+OpenRA's built-in bots draw their random choices from the clock, so the same
+map and seed don't replay the same game. Comparisons therefore need enough
+games per budget for their 95 % ranges to separate, not pairing by seed as
+in 0 A.D.
+
 **Result:** win rate against budget G. Transfer shows as A above B at small
 budgets: at G = 0 (zero-shot) and in the area under the curve. A vs C shows
 whether the concept layer is what transfers.
@@ -182,10 +189,15 @@ whether the concept layer is what transfers.
 1. **Done:** OpenRA-RL runs headless in the container (pinned versions,
    `openra/setup.sh`). Also confirmed that 0 A.D. bots can write data to the
    log on every OS.
-2. The shared features and macro actions in code: a Python definition, the
-   0 A.D. encoder in JS, and the OpenRA encoder in Python, with tests.
-3. The 0 A.D. recorder (Petra teacher), and a dataset from games on the
-   user's PC.
+2. **Done for 0 A.D.:** the shared features and macro actions in code: the
+   Python definition (`rtsconcepts/spec.py`) and the 0 A.D. encoder in JS
+   (`zeroad/.../ai/zadbot/rts.js`), kept equal by a test. Next: the OpenRA
+   encoder in Python.
+3. **Recorder done, data pending:** the AI "zadbot recorder (plain Petra)"
+   and `zadbot record`. It is checked on the real 0.28.0 Petra modules with a
+   made-up game state, and end to end on the stand-in game;
+   `rtsconcepts/dataset.py` loads the recordings. Next: a first real run on
+   the user's PC, then thousands of games.
 4. The BC student and its agreement gate; the student playing in 0 A.D.
 5. Evaluation vs Petra; reinforcement learning to pass the gates.
 6. The OpenRA executor and the A/B/C experiment. It runs in this container,

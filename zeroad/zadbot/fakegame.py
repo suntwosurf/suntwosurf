@@ -18,11 +18,13 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
 
 from .game import default_user_data
+from .match import RECORDER_AI
 from .params import BY_NAME, parse_params_js, to_unit
 
 # the made-up optimum the fake game rewards (0..1 units of each setting)
@@ -59,6 +61,10 @@ def _version_ok(have: str, dep: str) -> bool:
 
 def strength(user_data: Path, ai: str, log: "_Log | None" = None) -> float:
     if ai == "petra":
+        return 0.0
+    if ai == RECORDER_AI:  # plain Petra that records
+        if not (user_data / "mods" / "zadbot" / "simulation" / "ai" / ai / "data.json").is_file():
+            raise FileNotFoundError(f"Failed to create AI player: simulation/ai/{ai}/data.json not found")
         return 0.0
     params = user_data / "mods" / "zadbot" / "simulation" / "ai" / ai / "params.js"
     if not params.is_file():
@@ -123,12 +129,19 @@ class _Log:
 
     def __init__(self, logs_dir: Path | None, windows: bool):
         self.windows = windows
-        self.file = None
+        self.file = self.main_file = None
         if logs_dir is not None:
             logs_dir.mkdir(parents=True, exist_ok=True)
-            path = logs_dir / f"interestinglog_{int(time.time())}_{os.getpid()}.html"
-            self.file = open(path, "w", encoding="utf-8")
+            postfix = f"_{int(time.time())}_{os.getpid()}"
+            self.file = open(logs_dir / f"interestinglog{postfix}.html", "w", encoding="utf-8")
             self.file.write("<html><body><h1>Pyrogenesis Log</h1>\n")
+            self.main_file = open(logs_dir / f"mainlog{postfix}.html", "w", encoding="utf-8")
+            self.main_file.write("<html><body><h1>Main log</h1>\n")
+
+    def main(self, msg: str) -> None:
+        """A script's log(): the main log only, on every OS."""
+        if self.main_file:
+            self.main_file.write(f"<p>{html.escape(msg, quote=False)}</p>\n")
 
     def print(self, text: str) -> None:
         if not self.windows:
@@ -145,9 +158,10 @@ class _Log:
             self.file.write(f'<p class="warning">WARNING: {html.escape(msg)}</p>\n')
 
     def close(self) -> None:
-        if self.file:
-            self.file.write("<p>Engine exited successfully</p>\n")
-            self.file.close()
+        for f in (self.file, self.main_file):
+            if f:
+                f.write("<p>Engine exited successfully</p>\n")
+                f.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -262,10 +276,34 @@ def _play(a: dict[str, list[str]], user_data: Path, log: _Log) -> int:
                    for i in range(1, n_players + 1)]
     log.print("ZADBOT " + json.dumps({"event": "end", "time": end_s, "reason": reason, "winners": [stronger],
                                       "players": end_players}))
+    for i in range(1, n_players + 1):
+        if ais.get(i) == RECORDER_AI:
+            _record(user_data, log, i, player_civs[i], int(diffs.get(i, "3")), end_s, rng, strong=i == stronger)
     meta = {"timeElapsed": end_s * 1000, "playerStates": player_states, "mapSettings": sim_settings}
     (replay / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     log.print(f"FILES| Replay metadata written to '{replay / 'metadata.json'}'")
     return 0
+
+
+def _names(rts_js: str, const: str) -> list[str]:
+    m = re.search(rf"export const {const} = \[(.*?)\];", rts_js, re.S)
+    return re.findall(r'"([A-Za-z_0-9]+)"', re.sub(r"//[^\n]*", "", m.group(1))) if m else []
+
+
+def _record(user_data: Path, log: _Log, player: int, civ: str, difficulty: int, end_s: int,
+            rng: random.Random, strong: bool) -> None:
+    """What the recorder AI (zadbot_rec) writes: made-up but well-formed steps."""
+    rts = (user_data / "mods" / "zadbot" / "simulation" / "ai" / "zadbot" / "rts.js").read_text(encoding="utf-8")
+    features, privileged, actions = _names(rts, "FEATURES"), _names(rts, "PRIVILEGED"), _names(rts, "ACTIONS")
+    log.main("ZADREC " + json.dumps({"p": player, "header": True, "v": 1, "step": 10, "features": features,
+                                     "privileged": privileged, "actions": actions, "civ": civ,
+                                     "difficulty": difficulty, "behavior": "balanced"}))
+    for t in range(10, end_s + 1, 10):
+        f = [round(rng.uniform(0, 10), 3) for _ in features]
+        f[0] = round(t / 60, 3)
+        a = {name: rng.randint(1, 3) for name in actions if rng.random() < (0.4 if strong else 0.3)}
+        log.main("ZADREC " + json.dumps({"p": player, "t": t, "f": f,
+                                         "x": [round(rng.uniform(0, 10), 3) for _ in privileged], "a": a}))
 
 
 if __name__ == "__main__":

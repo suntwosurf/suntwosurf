@@ -34,7 +34,7 @@ function makeSim(victoryConditions)
 	const system = {
 		"Trigger": cmpTrigger,
 		"Timer": { "GetTime": () => now },
-		"PlayerManager": { "GetNonGaiaPlayers": () => [1, 2], "GetActivePlayers": active },
+		"PlayerManager": { "GetNonGaiaPlayers": () => [1, 2], "GetActivePlayers": active, "GetNumPlayers": () => 3 },
 		"EndGameManager": {
 			"MarkPlayersAsWon": (winners, victoryString, defeatString) => {
 				assert.equal(typeof victoryString(1), "string");
@@ -51,7 +51,7 @@ function makeSim(victoryConditions)
 		"print": s => printed.push(s),
 		"Resources": { "GetCodes": () => ["food", "wood", "stone", "metal"] },
 		"InitAttributes": { "settings": { "VictoryConditions": victoryConditions, "mapName": "Mainland",
-			"Seed": 5, "AISeed": 6, "PlayerData": [{ "AI": "zadbot", "AIDiff": 3 }, { "AI": "petra", "AIDiff": 3 }] } },
+			"Seed": 5, "AISeed": 6, "PlayerData": [null, { "AI": "zadbot", "AIDiff": 3 }, { "AI": "petra", "AIDiff": 3 }] } },
 		"Engine": {
 			"QueryInterface": (ent, iid) => ent == 1 ? system[iid] : { "GetCiv": () => players[ent - 100].civ },
 		},
@@ -94,6 +94,7 @@ const lines = sim => sim.printed.map(s => { assert.ok(s.startsWith("ZADBOT ") &&
 	assert.equal(p1.exploration, 300);
 	assert.equal(p1.score, 1500);
 	assert.equal(p1.ai, "zadbot");
+	assert.equal(out[1].players[1].ai, "petra");
 	assert.equal(p1.civ, "athen");
 	assert.equal(out[2].reason, "time_limit");
 	assert.deepEqual(out[2].winners, [1]);

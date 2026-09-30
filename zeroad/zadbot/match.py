@@ -201,6 +201,15 @@ def _total(counter) -> float:
     return counter["total"][-1] if isinstance(counter, dict) and "total" in counter else 0
 
 
+def _player_setup(pdata: list, pid: int, n_with_gaia: int) -> dict:
+    """Player ``pid``'s entry in the match settings' PlayerData. The game
+    setup lists players 1..n; once the match starts, the simulation puts gaia
+    first (LoadPlayerSettings in simulation/helpers/Player.js), so in
+    metadata.json the index is the player id."""
+    idx = pid if len(pdata) >= n_with_gaia else pid - 1
+    return (pdata[idx] if 0 <= idx < len(pdata) else None) or {}
+
+
 def parse_metadata(meta: dict, time_limit: int) -> dict:
     """Result fields from a replay's metadata.json."""
     settings = meta.get("mapSettings", {})
@@ -211,7 +220,7 @@ def parse_metadata(meta: dict, time_limit: int) -> dict:
         if pid == 0:  # gaia
             continue
         seq = st.get("sequences") or {}
-        info = pdata[pid - 1] if pid - 1 < len(pdata) and pdata[pid - 1] else {}
+        info = _player_setup(pdata, pid, len(states))
         entry = {"id": pid, "ai": info.get("AI") or "", "aiDiff": info.get("AIDiff"),
                  "civ": st.get("civ", info.get("Civ", "")), "state": st.get("state", ""),
                  "pop": st.get("popCount", 0), "phase": st.get("phase", "")}

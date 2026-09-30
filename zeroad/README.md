@@ -55,11 +55,14 @@ other. The game exits by itself when a player has won. The report shows who
 won, the game length, and where the replay is; you can watch it in the game
 under *Replays*.
 
-> **Not run yet on the real game.** The game could not run in the
-> environment this was built in: `pyrogenesis` refuses to run as root, and no
-> other user was available. Everything else was tested (see *Status*).
-> Run the commands above on your PC. Please share the output, so the numbers
-> can go into this README.
+Result on Windows, 0 A.D. 0.28.0, `random/mainland` size 128, seed 1:
+
+| bot | opponent | result | game time | real time |
+|---|---|---|---|---|
+| Petra Very Hard (athen) | Petra Very Easy (sele) | **won by conquest**, score 3591 vs 1147 | 12.0 min | ~6 s |
+
+A headless game runs about 100 times faster than real time here, so a
+learning generation (16 matches) takes minutes, not hours.
 
 ## How the learning works
 
@@ -246,14 +249,13 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 55 tests.
+  game version. 56 tests.
+* A real headless match on Windows with 0.28.0 (`finish-test`, see above):
+  started by zadbot, played to conquest, and read back from the replay.
 
-Not tested yet (needs the game running):
-* Real headless matches: the finish test and learning. The command line
-  flags, replay files and trigger/AI APIs used here were read from the 0.28.0
-  source and data, but have not been exercised in a running game.
-* Match length and speed on real hardware, so the default `time_limit`,
-  `workers` and generation sizes are first guesses.
+Not tested yet:
+* Learning and evaluation on the real game, so the default `time_limit` and
+  generation sizes are first guesses.
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
   writes on every OS, and errors from the game's own log

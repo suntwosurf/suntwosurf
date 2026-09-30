@@ -26,7 +26,11 @@ Trigger.prototype.ZadbotPlayerStats = function(playerID)
 		stats.enemyBuildingsDestroyedValue + stats.buildingsCapturedValue) / 10);
 	const exploration = stats.percentMapExplored * 10;
 
-	const playerData = InitAttributes.settings.PlayerData?.[playerID - 1] || {};
+	// Once the match has started, PlayerData has gaia first (LoadPlayerSettings
+	// in simulation/helpers/Player.js), so the index is the player id.
+	const allData = InitAttributes.settings.PlayerData || [];
+	const numPlayers = Engine.QueryInterface(SYSTEM_ENTITY, IID_PlayerManager).GetNumPlayers();
+	const playerData = allData[allData.length >= numPlayers ? playerID : playerID - 1] || {};
 	const cmpIdentity = Engine.QueryInterface(cmpPlayer.entity, IID_Identity);
 	return {
 		"id": playerID,

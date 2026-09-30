@@ -236,6 +236,8 @@ def _play(a: dict[str, list[str]], user_data: Path, log: _Log) -> int:
         },
     }
     (replay / "commands.txt").write_text("start " + json.dumps(attribs) + "\n", encoding="utf-8")
+    # like the simulation: from the match start on, PlayerData has gaia first
+    sim_settings = dict(attribs["settings"], PlayerData=[None] + attribs["settings"]["PlayerData"])
     log.print(f"FILES| Replay written to '{replay}'")
 
     base = 1500 * end_min / 30
@@ -255,7 +257,7 @@ def _play(a: dict[str, list[str]], user_data: Path, log: _Log) -> int:
                    for i in range(1, n_players + 1)]
     log.print("ZADBOT " + json.dumps({"event": "end", "time": end_s, "reason": reason, "winners": [stronger],
                                       "players": end_players}))
-    meta = {"timeElapsed": end_s * 1000, "playerStates": player_states, "mapSettings": attribs["settings"]}
+    meta = {"timeElapsed": end_s * 1000, "playerStates": player_states, "mapSettings": sim_settings}
     (replay / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     log.print(f"FILES| Replay metadata written to '{replay / 'metadata.json'}'")
     return 0

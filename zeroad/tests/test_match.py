@@ -29,8 +29,9 @@ def metadata(states, time_s, vcs=("conquest",)):
             {"name": f"P{i}", "civ": "athen", "state": st, "popCount": 10, "phase": "town", "sequences": seq(g, k, e)}
             for i, (st, g, k, e) in enumerate(states, start=1)
         ],
+        # as the simulation stores it: gaia first
         "mapSettings": {"VictoryConditions": list(vcs),
-                        "PlayerData": [{"AI": "zadbot_t0", "AIDiff": 3}, {"AI": "petra", "AIDiff": 3}]},
+                        "PlayerData": [None, {"AI": "zadbot_t0", "AIDiff": 3}, {"AI": "petra", "AIDiff": 3}]},
     }
 
 
@@ -143,3 +144,10 @@ def test_read_game_log(tmp_path):
     for line in lines:
         parse_stdout_line(line, state)
     assert "incompatible" in state and state["errors"][0].startswith("ERROR: JavaScript")
+
+
+def test_player_setup_with_and_without_gaia():
+    meta = metadata([("won", 1, 0, 0), ("defeated", 1, 0, 0)], time_s=60)
+    assert [p["ai"] for p in parse_metadata(meta, 0)["players"]] == ["zadbot_t0", "petra"]
+    meta["mapSettings"]["PlayerData"] = meta["mapSettings"]["PlayerData"][1:]  # game setup layout
+    assert [p["ai"] for p in parse_metadata(meta, 0)["players"]] == ["zadbot_t0", "petra"]

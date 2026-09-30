@@ -30,6 +30,7 @@ def test_run_match_reads_replay(fake_cfg, tmp_path):
     events = []
     r = run_match(fake_install(), spec, user, timeout=60, on_event=events.append)
     assert r.finished and r.reason == "conquest" and r.winners == [1]
+    assert [(p["ai"], p["aiDiff"]) for p in r.players] == [("petra", 5), ("petra", 1)]
     assert r.replay_dir and (Path(r.replay_dir) / "metadata.json").is_file()
     assert Path(r.replay_dir).parent == user / "replays" / "0.28.0"
     assert r.players[0]["score"] > r.players[1]["score"]

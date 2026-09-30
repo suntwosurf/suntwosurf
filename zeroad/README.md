@@ -60,9 +60,12 @@ Result on Windows, 0 A.D. 0.28.0, `random/mainland` size 128, seed 1:
 | bot | opponent | result | game time | real time |
 |---|---|---|---|---|
 | Petra Very Hard (athen) | Petra Very Easy (sele) | **won by conquest**, score 3591 vs 1147 | 12.0 min | ~6 s |
+| Petra Medium (cart) | Petra Medium (germ) | lost by conquest, 3058 vs 4753 | 26.1 min | ~6 s |
+| Petra Medium (iber) | Petra Medium (mace) | **won by conquest**, 13205 vs 6416 | 36.6 min | ~18 s |
 
-A headless game runs about 100 times faster than real time here, so a
-learning generation (16 matches) takes minutes, not hours.
+Every game was played to the end. A headless game runs about 100 times
+faster than real time here: a learning match (30 min limit) took 6–25 s,
+so a generation of 16 matches takes about 4 minutes with one game at a time.
 
 ## How the learning works
 
@@ -184,7 +187,12 @@ Stop-Process -Name pyrogenesis -Force
 Training time is almost all game time, and games run on the CPU only (the
 simulation and Petra's AI; the GPU is not used in headless mode). So more CPU
 cores means more games at once. `configs/many_cores.toml` is set up for about
-20 cores: 16 games at a time and 48 matches per generation.
+20 cores: 16 games at a time and 64 matches per generation (4 per candidate).
+
+More matches per candidate matter: in the first real learning run (2 matches
+per candidate), candidates that differed only slightly from Petra won or lost
+the same map and seed by chance, so the pick of the "best" candidate was
+mostly luck.
 
 ```powershell
 zadbot learn --config configs\many_cores.toml --generations 30
@@ -276,8 +284,9 @@ Tested:
   started by zadbot, played to conquest, and read back from the replay.
 
 Not tested yet:
-* Learning and evaluation on the real game, so the default `time_limit` and
-  generation sizes are first guesses.
+* Learning ran on the real game for 2 generations (Windows, one game at a
+  time) before it was stopped: too short to say whether it beats Petra.
+  Parallel games (one copy per worker) are tested only with the fake game.
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
   writes on every OS, and errors from the game's own log

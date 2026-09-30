@@ -11,8 +11,10 @@ workers = 16
 copies_dir = "runs/game-copies"
 
 [learn]
-# 16 candidates x 3 matches = 48 matches per generation: 3 rounds of 16 games.
-# More matches per candidate = less luck in the comparison.
+# 16 candidates x 4 matches = 64 matches per generation: 4 rounds of 16 games.
+# One match decides little: on the same map and seed, candidates that differ
+# only slightly from Petra already win or lose by chance. More matches per
+# candidate = less luck in the comparison.
 population = 16
-matches_per_candidate = 3
+matches_per_candidate = 4
 elite = 4

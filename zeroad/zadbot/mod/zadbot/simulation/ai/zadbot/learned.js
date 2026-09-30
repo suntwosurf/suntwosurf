@@ -70,9 +70,49 @@ export function LearnedConfig(difficulty, behavior, learned)
 LearnedConfig.prototype = Object.create(Config.prototype);
 LearnedConfig.prototype.constructor = LearnedConfig;
 
+/**
+ * @return {Object|null} the learned personality traits, e.g. { "aggressive": 0.9 }.
+ */
+function learnedPersonality(learned)
+{
+	const traits = {};
+	for (const key in learned)
+		if (key.startsWith("personality.") && learned[key].mode == "set")
+			traits[key.slice("personality.".length)] = learned[key].value;
+	return Object.keys(traits).length ? traits : null;
+}
+
 LearnedConfig.prototype.setConfig = function(gameState)
 {
-	Config.prototype.setConfig.call(this, gameState);
+	// Petra draws a personality at the start of setConfig and derives other
+	// settings from it (sentry towers, tower timing, early barracks when
+	// aggressive...). The learned traits go into the personality as Petra
+	// sets it, so those settings follow the learned personality too.
+	const traits = learnedPersonality(this.learned || {});
+	if (traits)
+	{
+		let personality = this.personality;
+		Object.defineProperty(this, "personality", {
+			"get": () => personality,
+			"set": value => { personality = Object.assign(value, traits); },
+			"configurable": true,
+			"enumerable": true
+		});
+	}
+	try
+	{
+		Config.prototype.setConfig.call(this, gameState);
+	}
+	finally
+	{
+		if (traits)
+		{
+			// back to plain data, so it is saved and restored as usual
+			const personality = this.personality;
+			delete this.personality;
+			this.personality = personality;
+		}
+	}
 	const unknown = applyLearned(this, this.learned || {});
 	// zadbot's match runner looks for this line: it means the learned
 	// settings do not fit this Petra version.

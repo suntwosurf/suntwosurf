@@ -122,6 +122,51 @@ What this run shows:
   mostly followed noise. (The learned "economy first" style may still be a
   small real edge, but 200 matches cannot see it.)
 
+## Next: do playing styles matter?
+
+Before building anything bigger (a strategy selector on top of Petra, i.e.
+hierarchical learning), check that there is something to select: do very
+different styles win clearly more or less often than Petra, and do different
+civilisations want different styles?
+
+| style | how it plays |
+|---|---|
+| `rush` | aggressive 0.95: Petra's own rush (first barracks at 12 population, town phase at 50), plus more soldiers, fewer women |
+| `boom` | economy first: 1.5 x workers, more women, faster phases, barracks late, few soldiers early |
+| `turtle` | defensive 0.95: more sentry towers, towers and fortresses sooner, a solid army at home, few attacks |
+| `learned` | the learned settings from `runs\learner.json` |
+
+```powershell
+zadbot evaluate --config configs\many_cores.toml --settings rush,boom,turtle,learned --matches 100 --seed 3
+```
+
+Every style and plain Petra play the same 100 fresh maps against Petra
+(500 matches, about half an hour to an hour with 16 at a time). The report
+(also saved in `runs\styles.json` and shown by `zadbot show`) answers:
+
+1. **Does the style change who wins?** Each style vs Petra on the same maps,
+   in percentage points with a 95 % range.
+   * No style differs clearly: Petra's settings barely matter, so a selector
+     over them has nothing to learn. Better bots then need changes to Petra's
+     code, or learning with neural networks through the game's learning
+     interface (a much bigger project).
+   * A style **beats** Petra: use it as the bot.
+   * Styles differ clearly (even if all are worse than Petra): the settings
+     do matter, and the per-civ question below is worth a larger run.
+2. **Would picking a style per civ help?** The best style per civilisation is
+   chosen on half of the maps and played on the other half (and the other way
+   round), next to the single best style for all. With 100 maps spread over
+   15 civs, that is about 3 maps per civ to choose from, too few; the report
+   says so. For this question run `--matches 400`, or list fewer civs in
+   `[match] civs` in a copy of the config.
+3. **Wins per civ**, as a table.
+
+Since this version, `aggressive` and `defensive` are in place before Petra
+derives its other settings from its personality (the number of sentry towers,
+how soon towers and fortresses follow, and for an aggressive Petra the early
+barracks and town phase). Before, only the later uses saw them. For the
+learned bot (0.35 / 0.42) this changes little.
+
 ## How the learning works
 
 1. **Scenarios.** Each generation picks maps, seeds and civilisations (mirror
@@ -154,8 +199,8 @@ the centre's average over 5 generations, and trust `evaluate`.
 
 | setting | Petra's value it changes | meaning |
 |---|---|---|
-| `aggressive` | `personality.aggressive` | eagerness to attack; above 0.7 Petra plans early rushes |
-| `defensive` | `personality.defensive` | towers, fortresses, bigger defence |
+| `aggressive` | `personality.aggressive` | eagerness to attack; above 0.7 Petra plans early rushes, builds its first barracks at 12 population and advances at 50 |
+| `defensive` | `personality.defensive` | towers, fortresses, bigger defence; above 0.7 one more sentry tower |
 | `phase2_pop` | × `Economy.popPhase2` | population before the town phase |
 | `phase3_workers` | × `Economy.workPhase3` | workers before the city phase |
 | `workers` | × `Economy.targetNumWorkers` | target number of workers |
@@ -217,6 +262,7 @@ zadbot finish-test --games 2                       # does it finish full games?
 zadbot learn --generations 10                      # 8 candidates x 2 matches per generation
 zadbot show                                        # learning curve + learned settings
 zadbot evaluate --baseline                         # learned vs Petra, and Petra vs Petra
+zadbot evaluate --settings rush,boom,turtle,learned   # do playing styles matter? (see "Next")
 zadbot install-mod --remove-slots                  # put the learned bot into the game
 ```
 
@@ -336,6 +382,7 @@ zadbot/
   game.py        find the game, its version, user data folder
   modinstall.py  install the mod, training slot AIs zadbot_t<n>, time-limit conditions
   params.py      the learned settings ("concepts") and their ranges
+  styles.py      fixed playing styles (rush, boom, turtle) for evaluate --settings
   match.py       run one headless match, read its replay (metadata.json)
   learner.py     cross-entropy search over the settings
   pipeline.py    parallel matches for learning, evaluation, finish test
@@ -349,13 +396,15 @@ tests/           pytest; tests/js/ runs the mod's JavaScript under Node.js
 
 Tested:
 * The bot's JavaScript on the real 0.28.0 Petra (extracted from the official
-  0.28.0 release), at difficulties 1, 3 and 5.
+  0.28.0 release), at difficulties 1, 3 and 5, including that the learned
+  personality drives Petra's own derived settings, and that each style
+  (`rush`, `boom`, `turtle`) changes what it should.
 * `ZadbotReport.js` in a mocked simulation: per-minute stats, the time-limit
   decision including ties, one end line after conquest, and the summary-screen
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
-  parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 66 tests.
+  parsing, parallel slots, learning, evaluation, the style comparison,
+  resume, and refusing another game version. 76 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 * The first full learning run and its evaluation on the real game (see
@@ -364,6 +413,8 @@ Tested:
 Not shown:
 * That the learned bot beats Petra: on 200 fresh maps it wins 53 % vs
   Petra's 50 %, +3 points (95 % range -7 to +13), i.e. no clear difference.
+* Whether playing styles matter in real games: `evaluate --settings` is
+  tested on the fake game only so far.
 
 Limits:
 * On Windows the game sends its console text to the debugger rather than to

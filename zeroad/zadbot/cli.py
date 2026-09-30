@@ -313,20 +313,36 @@ def cmd_learn(args) -> int:
 
 
 def cmd_evaluate(args) -> int:
-    from .learner import load_centre
-    from .pipeline import IncompatibleGame, evaluate
-    from .report import evaluation_report
+    from .learner import load_centre, make_scenarios
+    from .pipeline import IncompatibleGame, evaluate, style_analysis
+    from .report import evaluation_report, style_report
+    from .styles import parse_settings, style_values
 
     cfg = _config(args)
-    cfg, game, user_data, worker_games = _playing(cfg)
     variants: dict = {}
-    if Path(args.state).is_file():
+    if args.settings:
+        try:
+            names = parse_settings(args.settings)
+        except ValueError as e:
+            log(str(e))
+            return 1
+        variants["petra"] = "petra"  # the reference every style is compared with
+        for name in names:
+            if name == "learned":
+                if not Path(args.state).is_file():
+                    log(f"no learner state at {args.state} for 'learned': run zadbot learn first")
+                    return 1
+                variants[name] = load_centre(args.state)
+            elif name != "petra":
+                variants[name] = style_values(name)
+    elif Path(args.state).is_file():
         variants["learned"] = load_centre(args.state)
     elif not args.baseline:
         log(f"no learner state at {args.state}: run zadbot learn first, or use --baseline")
         return 1
     if args.baseline:
         variants["petra"] = "petra"
+    cfg, game, user_data, worker_games = _playing(cfg)
     n = args.matches or cfg.evaluate.matches
     seed = cfg.evaluate.seed if args.seed is None else args.seed
     m = cfg.match
@@ -337,16 +353,25 @@ def cmd_evaluate(args) -> int:
         results = evaluate(cfg, runner, variants, n, seed)
     except IncompatibleGame as e:
         return _refused(e, user_data)
-    out = Path(args.state).parent / "evaluate.json"
+    lines = evaluation_report(results)
+    if args.settings:
+        civs = [s.bot_civ for s in make_scenarios(cfg.match, n, seed)]
+        analysis = style_analysis({k: r["outcomes"] for k, r in results.items()}, civs)
+        lines += style_report(analysis, results)
+        out = Path(args.state).parent / "styles.json"
+        saved = {"variants": results, "styles": analysis}
+    else:
+        out = Path(args.state).parent / "evaluate.json"
+        saved = results
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(results, indent=1), encoding="utf-8")
-    log("\n".join(evaluation_report(results)))
+    out.write_text(json.dumps(saved, indent=1), encoding="utf-8")
+    log("\n".join(lines))
     log(f"saved {out}")
     return 0
 
 
 def cmd_show(args) -> int:
-    from .report import learning_report
+    from .report import evaluation_report, learning_report, style_report
 
     state = Path(args.state)
     if not state.is_file():
@@ -355,10 +380,14 @@ def cmd_show(args) -> int:
     log("\n".join(learning_report(json.loads(state.read_text(encoding="utf-8")))))
     ev = state.parent / "evaluate.json"
     if ev.is_file():
-        from .report import evaluation_report
-
         log("")
         log("\n".join(evaluation_report(json.loads(ev.read_text(encoding="utf-8")))))
+    st = state.parent / "styles.json"
+    if st.is_file():
+        saved = json.loads(st.read_text(encoding="utf-8"))
+        log("")
+        log("styles (zadbot evaluate --settings):")
+        log("\n".join(evaluation_report(saved["variants"]) + style_report(saved["styles"], saved["variants"])))
     return 0
 
 
@@ -428,6 +457,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seed", type=int, default=None,
                    help="another set of maps (default: [evaluate] seed); use a new one to confirm a result")
     s.add_argument("--baseline", action="store_true", help="also plain Petra vs Petra on the same seeds")
+    s.add_argument("--settings", default="",
+                   help="compare playing styles with plain Petra instead, e.g. rush,boom,turtle,learned "
+                        "(see zadbot/styles.py); saved to styles.json")
     s.set_defaults(func=cmd_evaluate)
 
     s = sub.add_parser("show", help="learning progress and learned settings")

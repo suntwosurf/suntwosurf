@@ -39,7 +39,8 @@ function snapshot(config)
 {
 	const out = {};
 	for (const key of Object.keys(entries).concat(["Economy.workPhase3", "Economy.workPhase4", "Economy.targetNumWorkers",
-		"Economy.popPhase2", "Military.popForBarracks1", "Military.popForBarracks2"]))
+		"Economy.popPhase2", "Military.popForBarracks1", "Military.popForBarracks2", "Military.numSentryTowers",
+		"Military.towerLapseTime", "priorities.defenseBuilding", "personality.cooperative"]))
 	{
 		let v = config;
 		for (const part of key.split("."))
@@ -54,6 +55,22 @@ const setConfigBefore = Config.prototype.setConfig;
 draws = 0;
 const plain = new Config(difficulty, "balanced");
 plain.setConfig(gameState);
+
+// Plain Petra that happened to draw the learned personality (same draws
+// otherwise): what the learned multipliers are applied to.
+draws = 0;
+const reference = new Config(difficulty, "balanced");
+const traits = {};
+for (const key in entries)
+	if (key.startsWith("personality."))
+		traits[key.slice("personality.".length)] = entries[key].value;
+let drawn = reference.personality;
+Object.defineProperty(reference, "personality", {
+	"get": () => drawn,
+	"set": value => { drawn = Object.assign(value, traits); },
+	"configurable": true
+});
+reference.setConfig(gameState);
 
 draws = 0;
 const Bot = learnedModule.makeLearnedBot(entries);
@@ -72,9 +89,12 @@ const defaultBot = new ZadBot(settings);
 
 console.log(JSON.stringify({
 	"plain": snapshot(plain),
+	"reference": snapshot(reference),
 	"learned": snapshot(bot.Config),
+	"personalityIsData": "value" in Object.getOwnPropertyDescriptor(bot.Config, "personality"),
 	"plainAfter": snapshot(plainAfter),
 	"restoredLearned": restored.Config.learned,
+	"personalitySaved": JSON.stringify(restored.Config.personality) == JSON.stringify(bot.Config.personality),
 	"warnings": warnings,
 	"prototypeUntouched": Config.prototype.setConfig === setConfigBefore,
 	"botIsPetra": bot instanceof PetraBot,

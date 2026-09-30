@@ -174,6 +174,7 @@ def evaluate(
         results = runner.run_all(jobs)
         out[name] = summarize(results, [s.bot_side for s in scenarios])
         outcomes[name] = [outcome(r, s.bot_side) for r, s in zip(results, scenarios)]
+        out[name]["outcomes"] = outcomes[name]
     if "petra" in outcomes:
         for name in outcomes:
             if name != "petra":
@@ -199,6 +200,72 @@ def paired_comparison(a: list[float | None], b: list[float | None]) -> dict:
     var = max(0.0, n - (better - worse) ** 2 / total) / total ** 2
     return {"better": better, "worse": worse, "p": min(1.0, 2 * tail), "matches": total,
             "diff": diff, "range": 1.96 * math.sqrt(var)}
+
+
+def _best(outcomes: dict[str, list[float | None]], idx: list[int], default: str | None) -> str | None:
+    """The variant with the highest mean outcome on matches ``idx``; ``default`` on a tie or without data."""
+    means = {}
+    for name, outs in outcomes.items():
+        xs = [outs[i] for i in idx if outs[i] is not None]
+        if xs:
+            means[name] = sum(xs) / len(xs)
+    if not means:
+        return default
+    top = max(means.values())
+    if default in means and means[default] >= top - 1e-9:
+        return default
+    return max(means, key=means.get)
+
+
+def style_analysis(outcomes: dict[str, list[float | None]], groups: list[str]) -> dict:
+    """Would it help to pick a variant per group (civilisation)?
+
+    Honest estimate: the matches are split in two halves. On one half the
+    best variant overall and the best per group are chosen, on the other half
+    they are played; then the other way round. So every match is scored by
+    choices made without it, like a selector meeting new maps. Returns win
+    counts per group and variant, and the chosen-per-group vs one-for-all
+    comparison (see paired_comparison)."""
+    n = len(groups)
+    half = [(i // 2) % 2 for i in range(n)]  # the bot alternates sides: both halves get both sides
+    per_group = [None] * n
+    one_for_all = [None] * n
+    choices = []
+    for h in (0, 1):
+        train = [i for i in range(n) if half[i] != h]
+        overall = _best(outcomes, train, None)
+        if overall is None:
+            continue
+        picks = {}
+        for g in sorted({groups[i] for i in range(n) if half[i] == h}):
+            picks[g] = _best(outcomes, [i for i in train if groups[i] == g], overall)
+        choices.append({"overall": overall, "per_group": picks})
+        for i in range(n):
+            if half[i] == h:
+                per_group[i] = outcomes[picks[groups[i]]][i]
+                one_for_all[i] = outcomes[overall][i]
+    table: dict[str, dict[str, list[int]]] = {}
+    for name, outs in outcomes.items():
+        for g, o in zip(groups, outs):
+            if o is None:
+                continue
+            cell = table.setdefault(g, {}).setdefault(name, [0, 0])
+            cell[0] += o > 0
+            cell[1] += 1
+
+    def win_rate(xs):
+        done = [x for x in xs if x is not None]
+        return sum(x > 0 for x in done) / len(done) if done else float("nan")
+
+    counts = [sum(g == x for x in groups) for g in sorted(set(groups))]
+    return {
+        "by_group": {g: table[g] for g in sorted(table)},
+        "choices": choices,
+        "per_group_win_rate": win_rate(per_group),
+        "one_for_all_win_rate": win_rate(one_for_all),
+        "selector": paired_comparison(per_group, one_for_all),
+        "matches_per_group": sum(counts) / len(counts) if counts else 0.0,
+    }
 
 
 def summarize(results: list[MatchResult], bot_ids: list[int]) -> dict:

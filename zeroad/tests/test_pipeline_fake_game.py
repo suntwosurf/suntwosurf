@@ -2,7 +2,6 @@
 game from zadbot.fakegame. The fake's matches are pretend: these tests check
 the plumbing, not how well the bot plays 0 A.D."""
 
-import dataclasses
 import json
 import shutil
 from pathlib import Path
@@ -90,6 +89,18 @@ def test_cli_on_fake_game(tmp_path, monkeypatch, capsys):
     assert "map set 77" in capsys.readouterr().out
     assert main(["show"]) == 0
     assert "learned settings" in capsys.readouterr().out
+    assert main(["evaluate", "--game", "fake", "--matches", "4", "--settings", "rush,boom,learned",
+                 "--workers", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "evaluating petra, rush, boom, learned" in out
+    assert "each vs petra on the same maps" in out and "Would picking a style per civ help?" in out
+    saved = json.loads((tmp_path / "runs/styles.json").read_text())
+    assert list(saved["variants"]) == ["petra", "rush", "boom", "learned"]
+    assert len(saved["variants"]["rush"]["outcomes"]) == 4
+    assert main(["show"]) == 0
+    assert "Does the style change who wins?" in capsys.readouterr().out
+    assert main(["evaluate", "--game", "fake", "--settings", "blitz"]) == 1
+    assert "unknown setting(s) blitz" in capsys.readouterr().out
     assert main(["install-mod", "--game", "fake", "--remove-slots"]) == 0
     params = tmp_path / "runs/fake-user-data/mods/zadbot/simulation/ai/zadbot/params.js"
     assert "personality.aggressive" in params.read_text()

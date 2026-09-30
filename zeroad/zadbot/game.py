@@ -73,6 +73,7 @@ def _default_binaries() -> list[Path]:
     exe = "pyrogenesis.exe" if sys.platform == "win32" else "pyrogenesis"
     roots: list[Path] = []
     if sys.platform == "win32":
+        roots += _registry_install_dirs()
         for env in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
             base = os.environ.get(env)
             if base:
@@ -87,6 +88,32 @@ def _default_binaries() -> list[Path]:
         *sorted(Path.home().glob("0ad*/usr/bin/pyrogenesis")),  # extracted AppImage
         *sorted(Path.home().glob("0ad*/binaries/system/pyrogenesis")),
     ]
+
+
+def _registry_install_dirs() -> list[Path]:  # pragma: no cover - Windows only
+    """Where the 0 A.D. installer says it installed the game. It writes
+    "Software\\0 A.D." (default value) and the uninstall entry's
+    InstallLocation, for the current user or all users
+    (source/tools/dist/0ad.nsi)."""
+    import winreg
+
+    keys = [
+        (r"Software\0 A.D.", ""),
+        (r"Software\Microsoft\Windows\CurrentVersion\Uninstall\0 A.D.", "InstallLocation"),
+        (r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\0 A.D.", "InstallLocation"),
+    ]
+    out: list[Path] = []
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for key, value in keys:
+            try:
+                with winreg.OpenKey(hive, key) as k:
+                    text, _ = winreg.QueryValueEx(k, value)
+            except OSError:
+                continue
+            text = str(text).strip().strip('"')
+            if text and Path(text) not in out:
+                out.append(Path(text))
+    return out
 
 
 def _binary_for(path: Path) -> Path:
@@ -122,11 +149,14 @@ def find_game(path: str = "") -> GameInstall:
     if path:
         binaries = [_binary_for(Path(path).expanduser())]
     else:
-        binaries = [b for b in _default_binaries() if b.is_file()]
+        searched = _default_binaries()
+        binaries = [b for b in searched if b.is_file()]
         if not binaries:
+            looked = "".join(f"\n  {b}" for b in searched)
             raise FileNotFoundError(
-                "0 A.D. not found. Pass --game <path to pyrogenesis or the install folder> "
-                "or set [game] path in the config."
+                f"0 A.D. not found. Looked for:{looked}\n"
+                "Pass --game <path to pyrogenesis or the install folder>, set [game] path in the "
+                "config, or set the environment variable ZADBOT_GAME."
             )
     binary = binaries[0].resolve()
     data_dir = _data_dir_for(binary)

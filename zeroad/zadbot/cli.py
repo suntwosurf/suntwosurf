@@ -39,7 +39,10 @@ def _user_data(cfg: BotConfig, game: GameInstall) -> Path:
 
 
 def _game(cfg: BotConfig) -> tuple[GameInstall, Path]:
-    game = find_game(cfg.game.path)
+    try:
+        game = find_game(cfg.game.path)
+    except FileNotFoundError as e:
+        raise SystemExit(str(e)) from None
     problems = game.problems()
     if problems:
         raise SystemExit("\n".join(["cannot run:"] + ["  " + p for p in problems]))

@@ -96,3 +96,50 @@ def test_time_limit_condition(tmp_path):
     assert ensure_time_limit(tmp_path, 45) == "zadbot_limit_45"
     data = json.loads((mod_dir(tmp_path) / "simulation/data/settings/victory_conditions/zadbot_limit_45.json").read_text())
     assert data["Data"]["Scripts"] == ["scripts/ZadbotReport.js"]
+
+
+def test_not_found_says_where_it_looked(monkeypatch, tmp_path):
+    from zadbot import cli, game as game_mod
+
+    monkeypatch.delenv("ZADBOT_GAME", raising=False)
+    missing = tmp_path / "nowhere" / "pyrogenesis.exe"
+    monkeypatch.setattr(game_mod, "_default_binaries", lambda: [missing])
+    with pytest.raises(FileNotFoundError, match="nowhere"):
+        find_game("")
+    # the commands report it as a message, not a traceback
+    with pytest.raises(SystemExit, match="ZADBOT_GAME"):
+        cli.main(["install-mod"])
+
+
+def test_registry_install_dirs(monkeypatch):
+    """The Windows installer's registry entries (source/tools/dist/0ad.nsi)."""
+    import types
+
+    from zadbot import game as game_mod
+
+    values = {
+        ("HKCU", r"Software\0 A.D."): r"D:\Games\0 A.D. Empires Ascendant",
+        ("HKLM", r"Software\Microsoft\Windows\CurrentVersion\Uninstall\0 A.D."): r'"E:\0ad"',
+        ("HKCU", r"Software\Microsoft\Windows\CurrentVersion\Uninstall\0 A.D."): r'"D:\Games\0 A.D. Empires Ascendant"',
+    }
+
+    class Key:
+        def __init__(self, hive, key):
+            if (hive, key) not in values:
+                raise OSError("no key")
+            self.v = values[(hive, key)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    fake = types.SimpleNamespace(
+        HKEY_CURRENT_USER="HKCU", HKEY_LOCAL_MACHINE="HKLM",
+        OpenKey=lambda hive, key: Key(hive, key),
+        QueryValueEx=lambda k, name: (k.v, 1),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    dirs = [str(d).replace("/", "\\") for d in game_mod._registry_install_dirs()]
+    assert dirs == [r"D:\Games\0 A.D. Empires Ascendant", r"E:\0ad"]

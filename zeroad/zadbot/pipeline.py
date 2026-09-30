@@ -185,14 +185,20 @@ def paired_comparison(a: list[float | None], b: list[float | None]) -> dict:
     """Two variants on the same scenarios: on how many did only one of them
     win, and how likely is a split at least that uneven by pure chance (exact
     two-sided sign test, i.e. McNemar)."""
-    better = sum(1 for x, y in zip(a, b) if x is not None and y is not None and x > 0 >= y)
-    worse = sum(1 for x, y in zip(a, b) if x is not None and y is not None and y > 0 >= x)
+    pairs = [(x, y) for x, y in zip(a, b) if x is not None and y is not None]
+    better = sum(1 for x, y in pairs if x > 0 >= y)
+    worse = sum(1 for x, y in pairs if y > 0 >= x)
     n = better + worse
+    total = len(pairs)
     if n == 0:
-        return {"better": 0, "worse": 0, "p": 1.0}
+        return {"better": 0, "worse": 0, "p": 1.0, "matches": total, "diff": 0.0, "range": 0.0}
     k = max(better, worse)
     tail = sum(math.comb(n, i) for i in range(k, n + 1)) / 2 ** n
-    return {"better": better, "worse": worse, "p": min(1.0, 2 * tail)}
+    # difference in win rate over all paired matches, with a 95 % range
+    diff = (better - worse) / total
+    var = max(0.0, n - (better - worse) ** 2 / total) / total ** 2
+    return {"better": better, "worse": worse, "p": min(1.0, 2 * tail), "matches": total,
+            "diff": diff, "range": 1.96 * math.sqrt(var)}
 
 
 def summarize(results: list[MatchResult], bot_ids: list[int]) -> dict:

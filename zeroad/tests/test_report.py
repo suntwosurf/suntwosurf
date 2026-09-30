@@ -21,7 +21,9 @@ def test_paired_comparison_matches_hand_count():
     pc = paired_comparison(learned, petra)
     assert (pc["better"], pc["worse"]) == (14, 6)
     assert abs(pc["p"] - 0.1153) < 0.001
-    assert paired_comparison([1.0, None], [-1.0, 1.0]) == {"better": 1, "worse": 0, "p": 1.0}
+    assert abs(pc["diff"] - 8 / 48) < 1e-9 and abs(pc["range"] - 0.1766) < 0.001
+    one = paired_comparison([1.0, None], [-1.0, 1.0])
+    assert (one["better"], one["worse"], one["p"], one["matches"]) == (1, 0, 1.0, 1)
     assert paired_comparison([], [])["p"] == 1.0
 
     row = {"wins": 29, "losses": 19, "draws": 0, "conquest_wins": 12, "conquest_losses": 10, "win_rate": 29 / 48,
@@ -29,4 +31,11 @@ def test_paired_comparison_matches_hand_count():
     lines = evaluation_report({"learned": dict(row, paired=pc), "petra": row})
     text = "\n".join(lines)
     assert "learned won 14 that petra lost, petra won 6 that learned lost" in text
-    assert "about 1 in 9" in text and "not proven yet" in text
+    assert "about 1 in 9" in text and "+17 percentage points" in text and "not clear yet" in text
+
+    # the 200-map check: 53 vs 47 -> no clear difference
+    big = paired_comparison([1.0] * 106 + [-1.0] * 94,
+                            [1.0] * 53 + [-1.0] * 53 + [1.0] * 47 + [-1.0] * 47)
+    assert (big["better"], big["worse"]) == (53, 47) and abs(big["p"] - 0.617) < 0.01
+    text = "\n".join(evaluation_report({"learned": dict(row, paired=big)}))
+    assert "+3 percentage points" in text and "no clear difference" in text

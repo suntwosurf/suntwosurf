@@ -51,9 +51,20 @@ def evaluation_report(results: dict[str, dict]) -> list[str]:
         lines.append(f"{name} vs petra on the same maps: {name} won {pc['better']} that petra lost, "
                      f"petra won {pc['worse']} that {name} lost.")
         odds = f"about 1 in {1 / pc['p']:.0f}" if pc["p"] > 0 else "never"
-        verdict = ("a real difference (p < 0.05)" if pc["p"] < 0.05 else
-                   "not proven yet: play more matches (--matches)")
-        lines.append(f"  A split this uneven happens by pure chance {odds} times (p = {pc['p']:.2f}): {verdict}.")
+        lines.append(f"  A split this uneven happens by pure chance {odds} times (p = {pc['p']:.2f}).")
+        if "diff" in pc:
+            d, h = 100 * pc["diff"], 100 * pc["range"]
+            lines.append(f"  {name} wins {d:+.0f} percentage points more often than petra "
+                         f"(95 % range {d - h:+.0f} to {d + h:+.0f}).")
+            if pc["p"] < 0.05:
+                verdict = "a real difference"
+            elif h > 10:
+                verdict = "not clear yet: more matches (--matches) would narrow the range"
+            else:
+                verdict = "no clear difference: any edge is smaller than the range above"
+        else:
+            verdict = "a real difference" if pc["p"] < 0.05 else "not clear"
+        lines.append(f"  Verdict: {verdict}.")
     return lines
 
 

@@ -99,9 +99,28 @@ on, an **economy first, fight later** style:
 
 Match by match: on 14 maps only the learned bot won, on 6 only Petra won
 (both won 15, both lost 13). A split this uneven happens by chance about 1
-time in 9 (sign test, p = 0.12), so the edge is **promising but not proven**;
-a larger evaluation on fresh maps settles it:
+time in 9 (sign test, p = 0.12): promising, but not proven. So it was checked
+on 200 fresh maps:
 `zadbot evaluate --config configs\many_cores.toml --baseline --matches 200 --seed 2`.
+
+| vs Petra (Medium), 200 fresh maps | wins | losses | win rate |
+|---|---|---|---|
+| learned bot | 106 | 94 | 53 % |
+| plain Petra | 100 | 100 | 50 % |
+
+Match by match: 53 maps only the learned bot won, 47 only Petra won (p = 0.62).
+The learned bot wins **3 percentage points more often, with a 95 % range of
+-7 to +13**. So there is **no clear difference from Petra**: the 60 % on the
+first 48 maps was mostly luck. Any real edge is at most around 10 points.
+
+What this run shows:
+* The pipeline works end to end on the real game: full games to conquest,
+  16 games in parallel, 32 generations of learning, fair evaluation.
+* Tuning Petra's settings with 4 matches per candidate did not make a
+  measurably stronger bot. One match is close to a coin flip, so 4 matches
+  cannot tell a slightly better setting from a lucky one, and the search
+  mostly followed noise. (The learned "economy first" style may still be a
+  small real edge, but 200 matches cannot see it.)
 
 ## How the learning works
 
@@ -339,12 +358,14 @@ Tested:
   game version. 66 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
-
 * The first full learning run and its evaluation on the real game (see
   *First learning run*).
 
-Not proven yet:
-* That the learned bot beats Petra: 60 % vs 44 % on 48 maps, p = 0.12.
+Not shown:
+* That the learned bot beats Petra: on 200 fresh maps it wins 53 % vs
+  Petra's 50 %, +3 points (95 % range -7 to +13), i.e. no clear difference.
+
+Limits:
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
   writes on every OS, and errors from the game's own log

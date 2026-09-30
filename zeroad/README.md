@@ -109,22 +109,41 @@ Install **0 A.D. 0.28.0** from <https://play0ad.com/download/>
 (`0ad-0.28.0-win64.exe`). By default it goes to
 `%LOCALAPPDATA%\0 A.D. Empires Ascendant`, where zadbot finds it.
 
-### 2. Python
+### 2. Get the code
+
+With git (`git --version` works):
+
+```powershell
+cd D:\
+git clone -b claude/wizardly-volta-4clefo https://github.com/suntwosurf/suntwosurf.git zadbot-src
+```
+
+Without git: download
+<https://github.com/suntwosurf/suntwosurf/archive/refs/heads/claude/wizardly-volta-4clefo.zip>
+(logged in to GitHub), unzip it to `D:\zadbot-src`, and use the folder that
+contains `zeroad` below.
+
+### 3. Python
 
 ```powershell
 conda create -n zadbot python=3.11 -y
 conda activate zadbot
-cd <this repo>\zeroad
+cd D:\zadbot-src\zeroad
 pip install -e .
 zadbot check            # game path, version 0.28.0, Petra found
 zadbot install-mod      # copies the mod to Documents\My Games\0ad\mods\zadbot
 ```
 
+Run every `zadbot` command from the `zeroad` folder: results go to `runs\`
+in the current folder (never run it from `C:\WINDOWS\system32`).
+`zadbot` only exists inside the `zadbot` environment, so run
+`conda activate zadbot` in every new window.
+
 If `check` does not find the game, pass `--game "D:\Games\0 A.D. Empires Ascendant"`
 (or the full path to `pyrogenesis.exe`), or set `[game] path` in a copy of
 `configs\default.toml`.
 
-### 3. Finish test, learn, evaluate
+### 4. Finish test, learn, evaluate
 
 ```powershell
 zadbot finish-test --games 2                       # does it finish full games?
@@ -142,7 +161,7 @@ Run time: a headless match runs much faster than real time, but Petra's AI is
 CPU-heavy. Run one `finish-test` first to see how long a match takes on your
 PC. With `--workers 3`, a generation is 16 matches.
 
-### 4. Play against it
+### 5. Play against it
 
 In the game: *Settings → Mod Selection*, enable **zadbot**, start. In the
 match setup, pick **zadbot (learned Petra)** as an AI player. Difficulty

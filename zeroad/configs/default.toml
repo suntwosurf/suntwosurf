@@ -1,0 +1,33 @@
+# zadbot settings. Every key is optional; these are the defaults.
+# zadbot learn --config configs/default.toml
+
+[game]
+path = ""            # pyrogenesis(.exe) or the 0 A.D. folder; "" = search the usual places
+                     # (Windows: %LOCALAPPDATA%\0 A.D. Empires Ascendant); "fake" = no game
+user_data = ""       # only if your 0 A.D. keeps mods/replays somewhere unusual
+workers = 2          # headless games at a time (each uses ~1 CPU core and ~1 GB RAM)
+match_timeout = 10800.0   # s of real time before a match is stopped
+
+[match]              # the 1 v 1 matches the bot learns from and is tested on
+maps = ["random/mainland"]
+size = 128           # tiles: 128 tiny, 192 small, 256 medium
+difficulty = 3       # both players; 3 = Medium, no AI resource bonus
+opponent = "petra"
+opponent_behavior = "balanced"
+civs = ["athen", "brit", "cart", "gaul", "germ", "han", "iber", "kush",
+        "mace", "maur", "pers", "ptol", "rome", "sele", "spart"]
+mirror = true        # both players get the same civ
+time_limit = 30      # minutes, then the highest score wins; 0 = until conquest
+
+[learn]
+population = 8       # settings tried per generation (the first is the current centre)
+matches_per_candidate = 2
+elite = 3
+smoothing = 0.7
+init_std = 0.25
+min_std = 0.04
+seed = 1000
+
+[evaluate]
+matches = 20
+seed = 1

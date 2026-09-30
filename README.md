@@ -1,5 +1,9 @@
 # aorbot — art of rally learning bot (concept)
 
+> Also in this repository: [zeroad/](zeroad/README.md), the same idea for
+> **0 A.D.**: a bot that plays full matches and learns Petra's settings by
+> playing against Petra.
+
 **Goal:** a bot that learns to **finish one stage, with one car, in one weather**
 in *art of rally*, and then keeps getting faster.
 

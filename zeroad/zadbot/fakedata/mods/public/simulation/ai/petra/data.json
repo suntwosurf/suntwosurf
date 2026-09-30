@@ -1,0 +1,7 @@
+{
+  "name": "Petra Bot (fake)",
+  "description": "Placeholder so zadbot check finds Petra in the fake game.",
+  "constructor": "PetraBot",
+  "filename": "_petrabot.js",
+  "useShared": true
+}

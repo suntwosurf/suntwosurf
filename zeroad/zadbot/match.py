@@ -18,6 +18,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -373,9 +374,11 @@ def run_match(
     tail: deque[str] = deque(maxlen=40)
 
     started = time.time()
+    # below normal priority on Windows, so the PC stays responsive with many games
+    flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if sys.platform == "win32" else 0
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-        text=True, encoding="utf-8", errors="replace", env=env,
+        text=True, encoding="utf-8", errors="replace", env=env, creationflags=flags,
     )
 
     def reader() -> None:

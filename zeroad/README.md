@@ -160,18 +160,39 @@ zadbot install-mod --remove-slots                  # put the learned bot into th
 (and the game it is running), and running it again resumes. Every match is
 saved in `runs\matches\` together with its replay folder.
 
-**One game at a time on Windows.** 0 A.D. opens its game files on Windows so
-that no other program can read them while it runs. A second copy of the
-game then misses `mod.zip` or `public.zip` and fails. So on Windows zadbot runs
-one game at a time (`--workers` is ignored), and it refuses to start while
-0 A.D. is already running. Don't play 0 A.D. while zadbot runs. If a game is
-left over from an earlier run, end it with:
+**Parallel games on Windows.** 0 A.D. opens its game files on Windows so
+that no other program can read them while it runs; a second copy of the game
+then misses `mod.zip` or `public.zip` and fails. So:
+
+* `--workers 1`: zadbot uses your installed game and refuses to start while
+  0 A.D. is running. Don't play meanwhile.
+* `--workers 2` or more: each worker gets its **own copy of the game**
+  (`runs\game-copies\worker<n>`, about 3.7 GB each, made once and reused)
+  and runs it with `-writableRoot`, which keeps that copy's mods, replays,
+  config and logs inside it. The workers never touch your normal 0 A.D.
+  folders, so you can even play meanwhile. Put the copies on a bigger drive
+  with `--copies-dir`.
+
+If games from an earlier run are left over, zadbot says so. End them with:
 
 ```powershell
 Stop-Process -Name pyrogenesis -Force
 ```
 
-On Linux, games run in parallel (`--workers`, about 1 CPU core each).
+### Faster on a big PC
+
+Training time is almost all game time, and games run on the CPU only (the
+simulation and Petra's AI; the GPU is not used in headless mode). So more CPU
+cores means more games at once. `configs/many_cores.toml` is set up for about
+20 cores: 16 games at a time and 48 matches per generation.
+
+```powershell
+zadbot learn --config configs\many_cores.toml --generations 30
+zadbot evaluate --config configs\many_cores.toml --baseline --matches 48
+```
+
+It needs about 60 GB of disk for the 16 copies. With less disk, lower
+`workers` in the file (each worker costs about 3.7 GB).
 
 Run time: a headless match runs much faster than real time, but Petra's AI is
 CPU-heavy. Run one `finish-test` first to see how long a match takes on your
@@ -190,7 +211,8 @@ levels work as for Petra.
 
 | key | default | |
 |---|---|---|
-| `[game] workers` | 2 | headless games at a time (about 1 CPU core each); always 1 on Windows |
+| `[game] workers` | 2 | headless games at a time (about 1 CPU core each) |
+| `[game] copies_dir` | `runs/game-copies` | Windows, 2+ workers: one game copy per worker (~3.7 GB each) |
 | `[match] maps`, `size` | mainland, 128 | small maps give short games |
 | `[match] difficulty` | 3 | both players; 3 = Medium, no AI bonus |
 | `[match] time_limit` | 30 | minutes, then the score decides; 0 = until conquest |
@@ -249,7 +271,7 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 56 tests.
+  game version. 63 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 

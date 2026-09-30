@@ -152,8 +152,13 @@ class _Log:
 
 def main(argv: list[str] | None = None) -> int:
     a = _args(sys.argv[1:] if argv is None else argv)
-    user_data = Path(os.environ.get("ZADBOT_USER_DATA") or default_user_data())
-    log = _Log(user_data / "logs" if "unique-logs" in a else None, bool(os.environ.get("ZADBOT_FAKE_WINDOWS")))
+    data_dir = Path(a.get("data-dir", [str(default_data_dir())])[0])
+    if "writableRoot" in a:  # like the engine: user data in the data folder, logs next to it
+        user_data, logs = data_dir, data_dir.parent / "logs"
+    else:
+        user_data = Path(os.environ.get("ZADBOT_USER_DATA") or default_user_data())
+        logs = user_data / "logs"
+    log = _Log(logs if "unique-logs" in a else None, bool(os.environ.get("ZADBOT_FAKE_WINDOWS")))
     try:
         return _play(a, user_data, log)
     finally:

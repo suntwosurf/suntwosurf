@@ -156,17 +156,42 @@ def test_stuck_game_is_stopped(fake_cfg, monkeypatch):
     assert r.status == "failed" and "did not start the match" in r.errors[0]
 
 
-def test_windows_one_game_at_a_time(tmp_path, monkeypatch, capsys):
+def test_windows_one_worker_refuses_next_to_running_game(tmp_path, monkeypatch):
     from zadbot import cli
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "one_game_at_a_time", lambda game: True)
-    monkeypatch.setattr(cli, "running_game_processes", lambda: [4321])
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [(4321, r"C:\\0ad\\binaries\\system\\pyrogenesis.exe")])
     with pytest.raises(SystemExit, match="4321") as e:
-        main(["finish-test", "--game", "fake", "--games", "1"])
+        main(["finish-test", "--game", "fake", "--games", "1", "--workers", "1"])
     assert "Stop-Process -Name pyrogenesis" in str(e.value)
 
-    monkeypatch.setattr(cli, "running_game_processes", lambda: [])
-    assert main(["finish-test", "--game", "fake", "--games", "2", "--workers", "3"]) == 0
+
+def test_windows_parallel_games_use_own_copies(tmp_path, monkeypatch, capsys):
+    """Windows, --workers 3: each worker plays in its own copy (-writableRoot),
+    even while the normal game runs; leftovers inside the copies block."""
+    from zadbot import cli
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "one_game_at_a_time", lambda game: True)
+    playing = (111, str(tmp_path / "0ad" / "binaries" / "system" / "pyrogenesis.exe"))
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [playing])
+    assert main(["finish-test", "--game", "fake", "--games", "3", "--workers", "3"]) == 0
     out = capsys.readouterr().out
-    assert "one game at a time" in out and "1 at a time" in out
+    assert "making 3 game copies" in out and "3/3 games played to the end" in out
+    copies = tmp_path / "runs" / "game-copies"
+    for i in range(3):
+        data = copies / f"worker{i}" / "binaries" / "data"
+        assert (data / "mods" / "zadbot" / "mod.json").is_file()  # mod installed into the copy
+    replays = list(copies.glob("worker*/binaries/data/replays/*/*/metadata.json"))
+    assert len(replays) == 3  # the games ran in the copies ...
+    assert not (tmp_path / "runs" / "fake-user-data" / "replays").exists()  # ... not in the normal folders
+
+    # the copies are reused
+    assert main(["finish-test", "--game", "fake", "--games", "3", "--workers", "3", "--seed", "7"]) == 0
+    assert "making" not in capsys.readouterr().out
+
+    leftover = (222, str(copies / "worker1" / "binaries" / "system" / "pyrogenesis.exe"))
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [playing, leftover])
+    with pytest.raises(SystemExit, match="Stop-Process -Id 222"):
+        main(["finish-test", "--game", "fake", "--games", "1", "--workers", "3"])

@@ -40,25 +40,30 @@ class Job:
 
 
 class MatchRunner:
-    def __init__(self, cfg: BotConfig, game: GameInstall, user_data: Path, out_dir: Path | None, log: Log):
+    """``worker_games``: an own (install, user data) per worker, from
+    copies.prepare_copies; None = all workers share ``game``."""
+
+    def __init__(self, cfg: BotConfig, game: GameInstall, user_data: Path, out_dir: Path | None, log: Log,
+                 worker_games: list[tuple[GameInstall, Path]] | None = None):
         self.cfg = cfg
         self.game = game
         self.user_data = user_data
         self.out_dir = out_dir
         self.log = log
+        self.worker_games = worker_games
         self._slots: queue.Queue[int] = queue.Queue()
         for i in range(cfg.game.workers):
             self._slots.put(i)
         self._lock = threading.Lock()
         self._done = 0
 
-    def _spec(self, job: Job, slot: int | None) -> MatchSpec:
+    def _spec(self, job: Job, slot: int | None, user_data: Path) -> MatchSpec:
         if job.spec is not None:
             return job.spec
         assert job.scenario is not None
         if job.values is not None:
             assert slot is not None
-            ai = write_slot(self.user_data, slot, job.values, comment=json.dumps(job.tag))
+            ai = write_slot(user_data, slot, job.values, comment=json.dumps(job.tag))
         else:
             ai = job.bot_ai
         return job.scenario.spec(ai, self.cfg.match)
@@ -66,8 +71,9 @@ class MatchRunner:
     def run_one(self, job: Job) -> MatchResult:
         slot = self._slots.get()
         try:
-            spec = self._spec(job, slot)
-            result = run_match(self.game, spec, self.user_data, timeout=self.cfg.game.match_timeout,
+            game, user_data = self.worker_games[slot] if self.worker_games else (self.game, self.user_data)
+            spec = self._spec(job, slot, user_data)
+            result = run_match(game, spec, user_data, timeout=self.cfg.game.match_timeout,
                                startup_timeout=self.cfg.game.startup_timeout)
         finally:
             self._slots.put(slot)

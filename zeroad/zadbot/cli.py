@@ -29,6 +29,8 @@ def _config(args) -> BotConfig:
         game = dataclasses.replace(game, user_data=args.user_data)
     if args.workers is not None:
         game = dataclasses.replace(game, workers=args.workers)
+    if args.copies_dir is not None:
+        game = dataclasses.replace(game, copies_dir=args.copies_dir)
     return dataclasses.replace(cfg, game=game)
 
 
@@ -49,23 +51,38 @@ def _game(cfg: BotConfig) -> tuple[GameInstall, Path]:
     return game, _user_data(cfg, game)
 
 
-def _playing(cfg: BotConfig) -> tuple[BotConfig, GameInstall, Path]:
-    """_game() for commands that start games. On Windows only one game can
-    run at a time (see game.one_game_at_a_time), so refuse to start next to
-    a running one and use one worker."""
+def _playing(cfg: BotConfig) -> tuple[BotConfig, GameInstall, Path, list | None]:
+    """_game() for commands that start games.
+
+    On Windows a running game locks its files against other copies (see
+    game.one_game_at_a_time). With one worker, zadbot uses the installed game
+    and refuses to start next to a running one. With more workers, each gets
+    its own copy of the game (copies.py); only leftover zadbot games block."""
+    from .copies import is_inside, prepare_copies
+
     game, user_data = _game(cfg)
+    worker_games = None
     if one_game_at_a_time(game):
         running = running_game_processes()
-        if running:
-            raise SystemExit(
-                f"0 A.D. is already running (pyrogenesis.exe, process {', '.join(map(str, running))}).\n"
-                "On Windows a second copy cannot read the game files while it runs. Close the game,\n"
-                "or end games left over from an earlier run with:  Stop-Process -Name pyrogenesis -Force"
-            )
         if cfg.game.workers > 1:
-            log("note: on Windows 0 A.D. locks its game files, so zadbot runs one game at a time")
-            cfg = dataclasses.replace(cfg, game=dataclasses.replace(cfg.game, workers=1))
-    return cfg, game, user_data
+            copies_dir = Path(cfg.game.copies_dir)
+            left = [pid for pid, path in running if not path or is_inside(path, copies_dir)]
+            if left:
+                ids = ",".join(map(str, left))
+                raise SystemExit(
+                    f"zadbot games from an earlier run are still running (process {ids}).\n"
+                    f"End them with:  Stop-Process -Id {ids} -Force"
+                )
+            worker_games = prepare_copies(game, cfg.game.workers, copies_dir, log)
+        elif running:
+            ids = ", ".join(str(pid) for pid, _ in running)
+            raise SystemExit(
+                f"0 A.D. is already running (pyrogenesis.exe, process {ids}).\n"
+                "On Windows a second copy cannot read the game files while it runs. Close the game,\n"
+                "or end games left over from an earlier run with:  Stop-Process -Name pyrogenesis -Force\n"
+                "(With --workers 2 or more, zadbot uses its own copies of the game and can run next to it.)"
+            )
+    return cfg, game, user_data, worker_games
 
 
 def _refused(e: Exception, user_data: Path) -> int:
@@ -77,12 +94,14 @@ def _refused(e: Exception, user_data: Path) -> int:
     return 1
 
 
-def _runner(cfg: BotConfig, game: GameInstall, user_data: Path, out: Path | None):
+def _runner(cfg: BotConfig, game: GameInstall, user_data: Path, out: Path | None, worker_games=None):
     from .modinstall import ensure_installed
     from .pipeline import MatchRunner
 
     ensure_installed(user_data)
-    return MatchRunner(cfg, game, user_data, out, log)
+    for _, worker_data in worker_games or []:
+        ensure_installed(worker_data)
+    return MatchRunner(cfg, game, user_data, out, log, worker_games)
 
 
 # ------------------------------------------------------------------ commands
@@ -141,7 +160,12 @@ def _print_result(result) -> None:
         log(f"  P{p['id']} {p.get('ai', ''):10s} {p.get('civ', ''):6s} {p.get('state', ''):9s} score {p['score']:.0f} "
             f"(economy {p['economy']:.0f}, military {p['military']:.0f}, exploration {p['exploration']:.0f})")
     if result.replay_dir:
-        log(f"  replay: {result.replay_dir}  (watch it in the game: Replays)")
+        from .game import default_user_data
+        from .copies import is_inside
+
+        where = ("watch it in the game: Replays" if is_inside(result.replay_dir, default_user_data())
+                 else f"to watch it in the game, copy the folder to {default_user_data() / 'replays'}")
+        log(f"  replay: {result.replay_dir}  ({where})")
     for e in result.errors[:10]:
         log(f"  error: {e}")
     if result.game_log and not result.finished:
@@ -156,13 +180,14 @@ def cmd_match(args) -> int:
     from .pipeline import IncompatibleGame
 
     cfg = _config(args)
-    cfg, game, user_data = _playing(cfg)
+    cfg = dataclasses.replace(cfg, game=dataclasses.replace(cfg.game, workers=1))  # one match
+    cfg, game, user_data, _ = _playing(cfg)
     players = [PlayerSpec.parse(args.p1), PlayerSpec.parse(args.p2)]
     players[0].civ, players[1].civ = args.civ1, args.civ2
     spec = MatchSpec(players=players, map=args.map, size=args.size, seed=args.seed, ai_seed=args.seed,
                      time_limit=args.limit)
     log(f"match: {spec.describe()}")
-    runner = _runner(dataclasses.replace(cfg, game=dataclasses.replace(cfg.game, workers=1)), game, user_data, Path(args.out))
+    runner = _runner(cfg, game, user_data, Path(args.out))
     from .pipeline import Job
 
     try:
@@ -178,11 +203,11 @@ def cmd_finish_test(args) -> int:
     from .pipeline import IncompatibleGame, finish_test
 
     cfg = _config(args)
-    cfg, game, user_data = _playing(cfg)
+    cfg, game, user_data, worker_games = _playing(cfg)
     bot, opp = PlayerSpec.parse(args.bot), PlayerSpec.parse(args.opponent)
     log(f"finish test: {bot.label()} vs {opp.label()}, {args.games} full game(s) on {args.map} "
         f"(size {args.size}), no time limit, {cfg.game.workers} at a time")
-    runner = _runner(cfg, game, user_data, Path(args.out))
+    runner = _runner(cfg, game, user_data, Path(args.out), worker_games)
     try:
         results = finish_test(runner, bot, opp, args.games, args.map, args.size, args.seed)
     except IncompatibleGame as e:
@@ -207,7 +232,7 @@ def cmd_learn(args) -> int:
     from .pipeline import IncompatibleGame, learn
 
     cfg = _config(args)
-    cfg, game, user_data = _playing(cfg)
+    cfg, game, user_data, worker_games = _playing(cfg)
     state = Path(args.state)
     if state.is_file():
         learner = CrossEntropyLearner.load(state, cfg.learn, cfg.match)
@@ -217,7 +242,7 @@ def cmd_learn(args) -> int:
     m = cfg.match
     log(f"learning vs {m.opponent} (difficulty {m.difficulty}) on {', '.join(m.maps)} size {m.size}, "
         f"{'time limit ' + str(m.time_limit) + ' min' if m.time_limit else 'until conquest'}, {cfg.game.workers} games at a time")
-    runner = _runner(cfg, game, user_data, state.parent)
+    runner = _runner(cfg, game, user_data, state.parent, worker_games)
     try:
         learn(cfg, runner, learner, args.generations, state, log)
     except IncompatibleGame as e:
@@ -238,7 +263,7 @@ def cmd_evaluate(args) -> int:
     from .report import evaluation_report
 
     cfg = _config(args)
-    cfg, game, user_data = _playing(cfg)
+    cfg, game, user_data, worker_games = _playing(cfg)
     variants: dict = {}
     if Path(args.state).is_file():
         variants["learned"] = load_centre(args.state)
@@ -251,7 +276,7 @@ def cmd_evaluate(args) -> int:
     m = cfg.match
     log(f"evaluating {', '.join(variants)} vs {m.opponent} (difficulty {m.difficulty}): {n} matches each, "
         f"seeds from {cfg.evaluate.seed} (not used in training)")
-    runner = _runner(cfg, game, user_data, Path(args.state).parent)
+    runner = _runner(cfg, game, user_data, Path(args.state).parent, worker_games)
     try:
         results = evaluate(cfg, runner, variants, n, cfg.evaluate.seed)
     except IncompatibleGame as e:
@@ -289,6 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--game", help='pyrogenesis(.exe) or the 0 A.D. folder; "fake" = stand-in without the game')
     common.add_argument("--user-data", help="0 A.D. user data folder (mods, replays), if not the default")
     common.add_argument("--workers", type=int, help="matches at a time")
+    common.add_argument("--copies-dir", help="Windows, --workers 2+: where the per-worker game copies go")
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("check", parents=[common], help="find the game, check its version and Petra")

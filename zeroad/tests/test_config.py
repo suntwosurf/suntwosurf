@@ -33,3 +33,12 @@ def test_shipped_config_loads():
 
     cfg = load_config(Path(__file__).parent.parent / "configs" / "default.toml")
     assert cfg.match.opponent == "petra"
+
+
+def test_many_cores_config_loads():
+    from pathlib import Path
+
+    cfg = load_config(Path(__file__).parent.parent / "configs" / "many_cores.toml")
+    assert cfg.game.workers == 16
+    assert cfg.learn.population * cfg.learn.matches_per_candidate == 48
+    assert cfg.match == BotConfig().match  # same matches: a learner state can switch configs

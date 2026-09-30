@@ -232,13 +232,33 @@ def one_game_at_a_time(game: GameInstall) -> bool:
     return sys.platform == "win32" and not game.fake
 
 
-def running_game_processes() -> list[int]:
-    """Process ids of running pyrogenesis.exe (Windows only; [] elsewhere)."""
+def running_game_processes() -> list[tuple[int, str]]:
+    """(process id, program path) of running pyrogenesis.exe; Windows only
+    ([] elsewhere). The path is "" when Windows does not tell it."""
     if sys.platform != "win32":
         return []
-    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq pyrogenesis.exe", "/FO", "CSV", "/NH"],
-                         capture_output=True, text=True).stdout
-    return parse_tasklist(out)
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-Process -Name pyrogenesis -ErrorAction SilentlyContinue | "
+             "Select-Object Id, Path | ConvertTo-Json -Compress"],
+            capture_output=True, text=True, timeout=60).stdout
+        return parse_process_json(out)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq pyrogenesis.exe", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True).stdout
+        return [(pid, "") for pid in parse_tasklist(out)]
+
+
+def parse_process_json(out: str) -> list[tuple[int, str]]:
+    """PowerShell's ConvertTo-Json: one object, a list, or nothing."""
+    out = out.strip()
+    if not out:
+        return []
+    data = json.loads(out)
+    if isinstance(data, dict):
+        data = [data]
+    return [(int(d["Id"]), d.get("Path") or "") for d in data]
 
 
 def parse_tasklist(out: str) -> list[int]:

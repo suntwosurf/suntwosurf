@@ -359,6 +359,19 @@ zadbot record --config configs\many_cores.toml --games 1000    # then many; abou
   decisions: ...** listing all the kinds of decisions, and no
   `recorder error`. If it shows one, paste it here.
 
+Then look at the data and train the first imitation model (the student
+without concepts, plain numpy, no GPU needed):
+
+```powershell
+pip install -e ..\transfer                  # once: the shared transfer code (rtsconcepts)
+rtsconcepts inspect runs\record             # value ranges and how often Petra makes each decision
+rtsconcepts bc runs\record                  # imitate Petra; scored on games it never saw
+```
+
+`bc` scores each decision next to "always give the most common answer",
+which already agrees most of the time on rare decisions; **balanced**
+accuracy (50 % = guessing) is the fair number.
+
 ## Configuration
 
 `configs/default.toml` lists every setting with its default. Use it with

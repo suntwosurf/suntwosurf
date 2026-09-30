@@ -196,9 +196,14 @@ whether the concept layer is what transfers.
 3. **Recorder done, data pending:** the AI "zadbot recorder (plain Petra)"
    and `zadbot record`. It is checked on the real 0.28.0 Petra modules with a
    made-up game state, and end to end on the stand-in game;
-   `rtsconcepts/dataset.py` loads the recordings. Next: a first real run on
-   the user's PC, then thousands of games.
-4. The BC student and its agreement gate; the student playing in 0 A.D.
+   `rtsconcepts/dataset.py` loads the recordings. The first 2 real games
+   recorded fine: 666 steps, every kind of decision, no errors, and 0.3 min
+   of real time per game. Next: thousands of games.
+4. **Started:** `rtsconcepts inspect` (value ranges, decision rates) and
+   `rtsconcepts bc`, the imitation baseline without concepts (student C). It
+   is scored on unseen games next to "always the majority answer", with
+   balanced accuracy as the fair measure. Next: the concept bottleneck, and
+   the student playing in 0 A.D.
 5. Evaluation vs Petra; reinforcement learning to pass the gates.
 6. The OpenRA executor and the A/B/C experiment. It runs in this container,
    on OpenRA-RL, headless.

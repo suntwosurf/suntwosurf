@@ -7,7 +7,7 @@ mods, replays, config and cache in its own ``binaries/data`` and its logs in
 ``binaries/logs`` (source/ps/GameSetup/Paths.cpp). Workers never touch each
 other's files or your normal 0 A.D. folders, so you can even play meanwhile.
 
-Each copy is the whole ``binaries`` folder, about 3.7 GB for 0.28.0. Copies
+Each copy is the whole ``binaries`` folder, about 4.2 GB for 0.28.0. Copies
 are made once and reused while the game is unchanged.
 """
 

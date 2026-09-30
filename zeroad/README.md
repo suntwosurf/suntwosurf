@@ -89,6 +89,11 @@ The centre is the learned bot. `zadbot evaluate` plays it against Petra on
 seeds it never trained on, next to plain Petra vs Petra on the same seeds
 (`--baseline`).
 
+Reading `zadbot show`: a single match is close to a coin flip, so the
+centre's value for one generation (4 matches) swings a lot, and "best" is the
+luckiest of 16 candidates, high even when nothing is learned. Watch `avg5`,
+the centre's average over 5 generations, and trust `evaluate`.
+
 ### The concepts it learns
 
 | setting | Petra's value it changes | meaning |
@@ -170,7 +175,7 @@ then misses `mod.zip` or `public.zip` and fails. So:
 * `--workers 1`: zadbot uses your installed game and refuses to start while
   0 A.D. is running. Don't play meanwhile.
 * `--workers 2` or more: each worker gets its **own copy of the game**
-  (`runs\game-copies\worker<n>`, about 3.7 GB each, made once and reused)
+  (`runs\game-copies\worker<n>`, about 4.2 GB each, made once and reused)
   and runs it with `-writableRoot`, which keeps that copy's mods, replays,
   config and logs inside it. The workers never touch your normal 0 A.D.
   folders, so you can even play meanwhile. Put the copies on a bigger drive
@@ -199,8 +204,8 @@ zadbot learn --config configs\many_cores.toml --generations 30
 zadbot evaluate --config configs\many_cores.toml --baseline --matches 48
 ```
 
-It needs about 60 GB of disk for the 16 copies. With less disk, lower
-`workers` in the file (each worker costs about 3.7 GB).
+It needs about 67 GB of disk for the 16 copies. With less disk, lower
+`workers` in the file (each worker costs about 4.2 GB).
 
 Run time: a headless match runs much faster than real time, but Petra's AI is
 CPU-heavy. Run one `finish-test` first to see how long a match takes on your
@@ -220,7 +225,7 @@ levels work as for Petra.
 | key | default | |
 |---|---|---|
 | `[game] workers` | 2 | headless games at a time (about 1 CPU core each) |
-| `[game] copies_dir` | `runs/game-copies` | Windows, 2+ workers: one game copy per worker (~3.7 GB each) |
+| `[game] copies_dir` | `runs/game-copies` | Windows, 2+ workers: one game copy per worker (~4.2 GB each) |
 | `[match] maps`, `size` | mainland, 128 | small maps give short games |
 | `[match] difficulty` | 3 | both players; 3 = Medium, no AI bonus |
 | `[match] time_limit` | 30 | minutes, then the score decides; 0 = until conquest |
@@ -279,14 +284,14 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 63 tests.
+  game version. 64 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 
 Not tested yet:
-* Learning ran on the real game for 2 generations (Windows, one game at a
-  time) before it was stopped: too short to say whether it beats Petra.
-  Parallel games (one copy per worker) are tested only with the fake game.
+* Whether the learned bot beats Petra: learning runs on the real game
+  (Windows, 16 parallel copies, 64 matches per generation, about 0.3-1.3 min
+  real time per match with 16 at once), but its result is not evaluated yet.
 * On Windows the game sends its console text to the debugger rather than to
   the console, so results are read from the replay files, which the game
   writes on every OS, and errors from the game's own log

@@ -32,7 +32,7 @@ class GameConfig:
     workers: int = 2  # matches run in parallel (each is one headless game); always 1 on Windows
     match_timeout: float = 3 * 3600.0  # s of real time before a match is stopped
     startup_timeout: float = 300.0  # s for a game to start its match before it counts as stuck
-    # Windows, workers > 1: one copy of the game per worker (~3.7 GB each), see copies.py
+    # Windows, workers > 1: one copy of the game per worker (~4.2 GB each), see copies.py
     copies_dir: str = "runs/game-copies"
 
 

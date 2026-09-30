@@ -1,6 +1,7 @@
 """Command line: ``zadbot <command> --help`` for details.
 
 check -> install-mod -> finish-test (does the bot finish a game?) -> learn -> evaluate -> show
+watch: open the game and see the learned bot play (also while learn runs)
 """
 
 from __future__ import annotations
@@ -151,6 +152,60 @@ def cmd_install_mod(args) -> int:
     if removed:
         log(f"removed {removed} training slot AI(s)")
     log("In the game: Settings > Mod Selection > enable 'zadbot', then pick 'zadbot (learned Petra)' as an AI.")
+    return 0
+
+
+def cmd_watch(args) -> int:
+    """Open 0 A.D. with the learned bot playing, next to a running `learn`
+    (which plays in its own copies of the game)."""
+    import random
+    import subprocess
+
+    from .config import CIVS_0_28
+    from .copies import is_inside
+    from .learner import load_centre
+    from .match import MatchSpec, PlayerSpec, watch_command
+    from .modinstall import AI_NAME, install_mod
+    from .params import describe
+
+    cfg = _config(args)
+    game, user_data = _game(cfg)
+    if one_game_at_a_time(game):
+        copies_dir = Path(cfg.game.copies_dir)
+        open_games = [pid for pid, path in running_game_processes() if not is_inside(path, copies_dir)]
+        if open_games:
+            raise SystemExit(
+                f"0 A.D. is already open (process {', '.join(map(str, open_games))}). Close it first: on Windows\n"
+                "two copies of the same game folder cannot run at once. (zadbot's training copies are fine.)"
+            )
+
+    learned, what = None, "plain Petra (no learning yet)"
+    state = Path(args.state)
+    if state.is_file():
+        learned = load_centre(state)
+        done = json.loads(state.read_text(encoding="utf-8"))["generation"]
+        what = f"learned settings after {done} generations"
+    install_mod(user_data, learned, what)
+
+    civ = args.civ or random.choice(CIVS_0_28)
+    seed = args.seed if args.seed >= 0 else random.randrange(1, 1_000_000)
+    bot = PlayerSpec(AI_NAME, args.difficulty, "balanced", civ)
+    opponent = PlayerSpec.parse(args.opponent)
+    opponent.civ = civ
+    human = 2 if args.play else 0
+    spec = MatchSpec(players=[bot, opponent], map=args.map, size=args.size, seed=seed, ai_seed=seed)
+    cmd = watch_command(game, spec, human=human, speed=args.speed)
+
+    who = "you" if args.play else opponent.label()
+    log(f"zadbot ({what}) vs {who}, {civ} vs {civ}, {args.map} size {args.size}, seed {seed}")
+    if learned:
+        log("\n".join("  " + line for line in describe(learned)))
+    if game.fake:
+        log("fake game: no window to open. Command: " + " ".join(cmd))
+        return 0
+    subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log("0 A.D. is starting. You are player 2." if args.play else
+        "0 A.D. is starting; you watch as an observer. Change the game speed in the game's menu, or use --speed.")
     return 0
 
 
@@ -325,6 +380,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--plain", action="store_true", help="install with plain Petra settings")
     s.add_argument("--remove-slots", action="store_true", help="delete the training slot AIs")
     s.set_defaults(func=cmd_install_mod)
+
+    s = sub.add_parser("watch", parents=[common],
+                       help="open 0 A.D. with the learned bot playing (also while `learn` runs)")
+    s.add_argument("--state", default="runs/learner.json")
+    s.add_argument("--opponent", default="petra:3", help="ai[:difficulty[:behavior]]")
+    s.add_argument("--difficulty", type=int, default=3, help="the learned bot's difficulty (3 = no AI bonus)")
+    s.add_argument("--play", action="store_true", help="play against the learned bot yourself")
+    s.add_argument("--civ", default="", help="both players' civ (default: random)")
+    s.add_argument("--map", default="random/mainland")
+    s.add_argument("--size", type=int, default=128)
+    s.add_argument("--seed", type=int, default=-1, help="-1 = a new random map each time")
+    s.add_argument("--speed", type=float, default=1.0, help="game speed (observers up to 20)")
+    s.set_defaults(func=cmd_watch)
 
     s = sub.add_parser("match", parents=[common], help="play one match, e.g. --p1 zadbot:3 --p2 petra:3")
     s.add_argument("--p1", default="petra:3", help="ai[:difficulty[:behavior]]")

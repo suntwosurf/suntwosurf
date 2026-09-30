@@ -195,3 +195,35 @@ def test_windows_parallel_games_use_own_copies(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "running_game_processes", lambda: [playing, leftover])
     with pytest.raises(SystemExit, match="Stop-Process -Id 222"):
         main(["finish-test", "--game", "fake", "--games", "1", "--workers", "3"])
+
+
+def test_watch_installs_learned_bot_and_opens_the_game(tmp_path, monkeypatch, capsys):
+    from zadbot import cli
+    from zadbot.params import parse_params_js
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["learn", "--game", "fake", "--generations", "1", "--workers", "3"]) == 0
+    capsys.readouterr()
+    assert main(["watch", "--game", "fake", "--civ", "rome", "--seed", "7", "--speed", "5"]) == 0
+    out = capsys.readouterr().out
+    assert "learned settings after 1 generations" in out
+    for arg in ["-mod=zadbot", "-autostart=random/mainland", "-autostart-player=-1", "-autostart-ai=1:zadbot",
+                "-autostart-ai=2:petra", "-autostart-civ=1:rome", "-autostart-civ=2:rome", "-autostart-seed=7",
+                "-autostart-speed=5"]:
+        assert arg in out
+    assert "-autostart-nonvisual" not in out  # a window, not a headless run
+    params = tmp_path / "runs/fake-user-data/mods/zadbot/simulation/ai/zadbot/params.js"
+    assert parse_params_js(params.read_text())  # the learned settings, not plain Petra
+
+    assert main(["watch", "--game", "fake", "--play"]) == 0
+    out = capsys.readouterr().out
+    assert "-autostart-player=2" in out and "-autostart-ai=1:zadbot" in out and "-autostart-ai=2:" not in out
+
+    # Windows: refuses while the normal game is open, not because of training copies
+    monkeypatch.setattr(cli, "one_game_at_a_time", lambda game: True)
+    copy = str(tmp_path / "runs" / "game-copies" / "worker3" / "binaries" / "system" / "pyrogenesis.exe")
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [(5, copy)])
+    assert main(["watch", "--game", "fake"]) == 0
+    monkeypatch.setattr(cli, "running_game_processes", lambda: [(5, copy), (6, r"C:\0ad\binaries\system\pyrogenesis.exe")])
+    with pytest.raises(SystemExit, match="already open"):
+        main(["watch", "--game", "fake"])

@@ -211,10 +211,25 @@ Run time: a headless match runs much faster than real time, but Petra's AI is
 CPU-heavy. Run one `finish-test` first to see how long a match takes on your
 PC. A generation is 16 matches.
 
-### 5. Play against it
+### 5. Watch it play, or play against it
 
-In the game: *Settings → Mod Selection*, enable **zadbot**, start. In the
-match setup, pick **zadbot (learned Petra)** as an AI player. Difficulty
+```powershell
+zadbot watch                  # opens 0 A.D.: learned bot vs Petra, you watch
+zadbot watch --speed 5        # the same, 5 times faster
+zadbot watch --play           # you (player 2) against the learned bot
+```
+
+`watch` takes the settings from the latest finished generation
+(`runs\learner.json`), installs them into your normal 0 A.D. as the AI
+"zadbot (learned Petra)", and starts a match with the game window open: a
+new random map each time (`--seed` for a fixed one), both players on the same
+random civilisation (`--civ` to choose). It also works **while `learn` is
+running** with 2 or more workers, because training plays in its own copies of
+the game. Run it again later to see a newer generation.
+
+You can also set it up yourself: *Settings → Mod Selection*, enable
+**zadbot**, start, and pick **zadbot (learned Petra)** as an AI player
+(`zadbot install-mod` puts the latest learned settings there). Difficulty
 levels work as for Petra.
 
 ## Configuration
@@ -269,7 +284,7 @@ zadbot/
   learner.py     cross-entropy search over the settings
   pipeline.py    parallel matches for learning, evaluation, finish test
   fakegame.py    stand-in game for trying without 0 A.D.
-  cli.py         zadbot check | install-mod | match | finish-test | learn | evaluate | show
+  cli.py         zadbot check | install-mod | match | finish-test | learn | evaluate | show | watch
 configs/default.toml
 tests/           pytest; tests/js/ runs the mod's JavaScript under Node.js
 ```
@@ -284,7 +299,7 @@ Tested:
   score formula.
 * The whole Python pipeline against the fake game: headless run, replay
   parsing, parallel slots, learning, evaluation, resume, and refusing another
-  game version. 64 tests.
+  game version. 65 tests.
 * A real headless match on Windows with 0.28.0 (`finish-test`, see above):
   started by zadbot, played to conquest, and read back from the replay.
 

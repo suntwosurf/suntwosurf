@@ -177,6 +177,31 @@ def build_command(game: GameInstall, spec: MatchSpec, victory: list[str]) -> lis
     return cmd
 
 
+def watch_command(game: GameInstall, spec: MatchSpec, human: int = 0, speed: float = 1.0) -> list[str]:
+    """Command line for a match with the game window open: every player an AI
+    and you watching (``human=0``), or you playing as player ``human``."""
+    kind = spec.map.split("/", 1)[0]
+    cmd = [
+        *game.command,
+        "-mod=public",
+        f"-mod={MOD_NAME}",
+        f"-autostart={spec.map}",
+        f"-autostart-player={human if human else -1}",
+        f"-autostart-seed={spec.seed}",
+        f"-autostart-aiseed={spec.ai_seed}",
+    ]
+    if kind == "random":
+        cmd += [f"-autostart-size={spec.size}", f"-autostart-players={len(spec.players)}"]
+    for i, p in enumerate(spec.players, start=1):
+        if i != human:
+            cmd += [f"-autostart-ai={i}:{p.ai}", f"-autostart-aidiff={i}:{p.difficulty}",
+                    f"-autostart-aibehavior={i}:{p.behavior}"]
+        cmd.append(f"-autostart-civ={i}:{p.civ or 'random'}")
+    if speed != 1:
+        cmd.append(f"-autostart-speed={speed:g}")
+    return cmd
+
+
 def victory_conditions(user_data: Path, spec: MatchSpec) -> list[str]:
     """Conquest plus our report (which also enforces the time limit)."""
     report = ensure_time_limit(user_data, spec.time_limit) if spec.time_limit else "zadbot_report"

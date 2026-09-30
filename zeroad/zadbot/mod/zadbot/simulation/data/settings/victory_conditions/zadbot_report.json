@@ -1,0 +1,13 @@
+{
+	"TranslatedKeys": ["Title", "Description"],
+	"Data":
+	{
+		"Title": "zadbot report",
+		"Description": "Prints match statistics for zadbot every minute. Does not change the game.",
+		"Scripts":
+		[
+			"scripts/ZadbotReport.js"
+		],
+		"GUIOrder": 100
+	}
+}

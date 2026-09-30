@@ -1,0 +1,7 @@
+{
+  "name": "zadbot (learned Petra)",
+  "description": "Petra from this 0 A.D. version with settings learned by playing against Petra. Difficulty levels work as for Petra.",
+  "constructor": "ZadBot",
+  "filename": "_zadbot.js",
+  "useShared": true
+}

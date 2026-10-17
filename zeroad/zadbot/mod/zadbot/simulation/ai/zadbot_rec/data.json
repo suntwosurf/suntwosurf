@@ -1,0 +1,7 @@
+{
+  "name": "zadbot recorder (plain Petra)",
+  "description": "Plain Petra that writes what it sees and decides to the game's main log, as teacher data for zadbot. Plays exactly like Petra.",
+  "constructor": "RecorderBot",
+  "filename": "_rec.js",
+  "useShared": true
+}

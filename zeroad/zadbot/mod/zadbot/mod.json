@@ -1,0 +1,8 @@
+{
+	"name": "zadbot",
+	"version": "0.1.0",
+	"label": "zadbot: learned Petra",
+	"url": "https://github.com/suntwosurf/suntwosurf",
+	"description": "Petra with settings learned from matches against Petra, plus match reports for headless runs. Built for 0 A.D. 0.28.0 and uses that version's own Petra code.",
+	"dependencies": ["0ad=0.28.0"]
+}

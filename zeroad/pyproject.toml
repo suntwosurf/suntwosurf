@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zadbot"
+version = "0.1.0"
+description = "Learning bot concept for 0 A.D.: Petra with settings learned by playing full matches against Petra"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+zadbot = "zadbot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["zadbot*"]
+
+[tool.setuptools.package-data]
+zadbot = ["mod/**/*", "fakedata/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

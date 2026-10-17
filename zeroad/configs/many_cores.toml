@@ -1,0 +1,20 @@
+# For a PC with many cores (e.g. 20 cores / 28 threads, 64+ GB RAM):
+#   zadbot learn --config configs/many_cores.toml --generations 30
+# Every key not set here keeps its default (configs/default.toml).
+
+[game]
+# Games at a time. Each game uses about 1 CPU core and 1-2 GB RAM.
+# On Windows each worker needs its own copy of the game: about 4.2 GB of disk
+# per worker in copies_dir (made once, then reused). Use fewer workers if the
+# disk is small, or point copies_dir to a bigger drive.
+workers = 16
+copies_dir = "runs/game-copies"
+
+[learn]
+# 16 candidates x 4 matches = 64 matches per generation: 4 rounds of 16 games.
+# One match decides little: on the same map and seed, candidates that differ
+# only slightly from Petra already win or lose by chance. More matches per
+# candidate = less luck in the comparison.
+population = 16
+matches_per_candidate = 4
+elite = 4

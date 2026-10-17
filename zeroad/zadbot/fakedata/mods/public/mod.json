@@ -1,0 +1,7 @@
+{
+	"name": "0ad",
+	"version": "0.28.0",
+	"label": "fake 0 A.D. for zadbot tests",
+	"description": "Not the game: used by zadbot.fakegame.",
+	"dependencies": []
+}

@@ -1,0 +1,15 @@
+diff --git a/OpenRA.Game/Traits/World/ScreenMap.cs b/OpenRA.Game/Traits/World/ScreenMap.cs
+index 079f811..6e0cec6 100644
+--- a/OpenRA.Game/Traits/World/ScreenMap.cs
++++ b/OpenRA.Game/Traits/World/ScreenMap.cs
+@@ -107,6 +107,10 @@ public void Remove(Actor a)
+ 
+ 		public void Add(IEffect effect, WPos position, Size size)
+ 		{
++			// Headless (Game.Platform=Null): no renderer, nothing to place on screen
++			if (worldRenderer == null)
++				return;
++
+ 			var screenPos = worldRenderer.ScreenPxPosition(position);
+ 			var screenWidth = Math.Abs(size.Width);
+ 			var screenHeight = Math.Abs(size.Height);

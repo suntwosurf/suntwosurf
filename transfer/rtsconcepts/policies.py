@@ -67,16 +67,30 @@ class RandomPolicy:
 
 
 class BCPolicy:
-    """The imitation model (bc.py): take an action when its probability is
-    above ``threshold``; units in batches of ``batch``."""
+    """A trained model (bc.BCModel or student.ConceptStudent) as a policy.
+    It keeps the memory of its own decisions (call ``reset`` before each
+    game). ``sample``: take each action with its predicted probability, so
+    rare decisions happen about as often as the teacher made them; otherwise
+    when the probability is above ``threshold``. Units in batches of
+    ``batch``."""
 
     name = "bc"
 
-    def __init__(self, model, threshold: float = 0.5, batch: int = 3):
-        self.model, self.threshold, self.batch = model, threshold, batch
+    def __init__(self, model, sample: bool = True, threshold: float = 0.5, batch: int = 3, seed: int | None = None):
+        self.model, self.sample, self.threshold, self.batch = model, sample, threshold, batch
+        self.rng = random.Random(seed)
+        self.reset()
+
+    def reset(self) -> None:
+        from .memory import Memory
+
+        self.memory = Memory()
 
     def __call__(self, f, st=None):
         import numpy as np
 
-        p = self.model.predict(np.array([f], dtype=np.float64))[0]
-        return {a: (self.batch if a.startswith("TRAIN") else 1) for a, pa in zip(ACTIONS, p) if pa > self.threshold}
+        p = self.model.predict(np.array([f], dtype=np.float64), self.memory.vector()[None])[0]
+        take = [self.rng.random() < pa if self.sample else pa > self.threshold for pa in p]
+        a = {name: (self.batch if name.startswith("TRAIN") else 1) for name, t in zip(ACTIONS, take) if t}
+        self.memory.observe(a)
+        return a

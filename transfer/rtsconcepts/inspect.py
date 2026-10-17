@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from .concepts import stack_labels
 from .dataset import Trajectory, stack
-from .spec import ACTIONS, FEATURES
+from .spec import ACTIONS, CONCEPTS, FEATURES
 
 # features that can't be negative, and those that are shares (0..1)
 SHARES = {"supply_headroom", "production_busy", "tech", "explored"}
@@ -58,4 +59,14 @@ def inspect(trajs: list[Trajectory]) -> list[str]:
         mean = col[taken].mean() if taken.any() else 0.0
         lines.append(f"{name:18s} {taken.mean() * 100:8.1f} %      {mean:6.1f}")
     lines.append(f"{'(none)':18s} {(a.sum(1) == 0).mean() * 100:8.1f} %")
+
+    labels = stack_labels(trajs)
+    lines.append("")
+    lines.append("concept label            p5      median  p95     above 0.5   problems")
+    for j, name in enumerate(CONCEPTS):
+        col = labels[:, j]
+        p5, med, p95 = np.percentile(col, [5, 50, 95])
+        # a label that is (nearly) always the same teaches nothing
+        flat = "never changes" if col.min() == col.max() else ("almost never changes" if p5 == p95 else "ok")
+        lines.append(f"{name:22s} {p5:7.2f} {med:7.2f} {p95:7.2f}   {(col > 0.5).mean() * 100:6.1f} %    {flat}")
     return lines

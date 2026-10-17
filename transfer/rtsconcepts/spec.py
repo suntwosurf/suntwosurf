@@ -47,3 +47,22 @@ ACTIONS = [
     "TRAIN_WORKER", "TRAIN_ARMY", "BUILD_SUPPLY", "BUILD_ECONOMY", "BUILD_PRODUCTION",
     "BUILD_DEFENSE", "TECH_UP", "EXPAND", "ATTACK", "DEFEND",
 ]
+
+# What the student remembers of its own decisions (memory.py). Not recorded:
+# in either game the student keeps it itself.
+MEMORY_STEPS = 6   # "recent" = the last minute
+MEMORY_CAP = 30    # "steps since" counts up to 5 minutes
+MEMORY = [f"recent_{a}" for a in ACTIONS] + [f"since_{a}" for a in ACTIONS]
+
+# The bottleneck (concepts.py): numbers 0..1 the student learns to predict,
+# labelled by fixed formulas from the features, the privileged values and the
+# teacher's recent decisions.
+CONCEPTS = [
+    "RESOURCE_SCARCITY",      # stock and income low for what production could spend
+    "PRODUCTION_BOTTLENECK",  # money piling up beyond what production spends in a minute
+    "SUPPLY_BLOCK",           # supply headroom near 0
+    "ECONOMIC_INVESTMENT",    # share of the last minute's decisions spent on the economy
+    "MILITARY_ADVANTAGE",     # own army value vs the enemy's true one
+    "ECONOMIC_ADVANTAGE",     # own income vs the enemy's true one
+    "DEFENSIVE_PRESSURE",     # enemy army at home, losses while it is there
+]

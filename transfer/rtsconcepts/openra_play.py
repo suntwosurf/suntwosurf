@@ -19,6 +19,8 @@ async def play_game(policy, url: str = "http://localhost:8000", max_minutes: flo
 
     started = time.time()
     steps = []
+    if hasattr(policy, "reset"):  # a new game: forget the last one's decisions
+        policy.reset()
     async with OpenRAMCPClient(base_url=url, message_timeout_s=300.0) as env:
         async def call(tool, **args):
             return await env.call_tool(tool, **args)

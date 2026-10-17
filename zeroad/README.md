@@ -359,18 +359,38 @@ zadbot record --config configs\many_cores.toml --games 1000    # then many; abou
   decisions: ...** listing all the kinds of decisions, and no
   `recorder error`. If it shows one, paste it here.
 
-Then look at the data and train the first imitation model (the student
-without concepts, plain numpy, no GPU needed):
+Then look at the data and train the students (plain numpy, no GPU needed,
+under a minute each):
 
 ```powershell
 pip install -e ..\transfer                  # once: the shared transfer code (rtsconcepts)
-rtsconcepts inspect runs\record             # value ranges and how often Petra makes each decision
-rtsconcepts bc runs\record                  # imitate Petra; scored on games it never saw
+rtsconcepts inspect runs\record             # value ranges, how often Petra makes each decision, concept labels
+rtsconcepts bc runs\record                  # imitate Petra (no concepts); scored on games it never saw
+rtsconcepts student runs\record --compare   # the concept student, next to bc on the same games
+rtsconcepts curve runs\record               # would more recordings help?
 ```
 
-`bc` scores each decision next to "always give the most common answer",
-which already agrees most of the time on rare decisions; **balanced**
-accuracy (50 % = guessing) is the fair number.
+Rare decisions (an attack, a new phase) are almost always "no", so
+"always say no" already agrees 99 % of the time on them. The scores
+therefore don't use a cut-off: **AUC** (0.5 = guessing, 1 = perfect ranking
+of the moments Petra takes the decision) and **skill** (log-loss better than
+the base rate). Both students also remember their own recent decisions:
+Petra works in rhythms, and the student keeps the same memory in either
+game.
+
+The first 1000 recorded games (354 350 steps; 200 games kept for the test):
+
+| student | mean AUC | AUC on rare decisions | skill |
+|---|---|---|---|
+| bc, features only | 0.851 | 0.865 | 23 % |
+| bc, features + memory | **0.893** | **0.926** | **33 %** |
+| concept student (features + memory → 7 concepts → decisions) | 0.875 | 0.906 | 29 % |
+
+The concept student predicts its concepts closely (88-99 % of their
+variation explained, including the true enemy army it can't see) and pays
+about 0.02 AUC for the bottleneck. The learning curve still rises at 800
+games (+0.010 AUC from the last doubling), so more recordings help:
+`zadbot record ... --seed 2` and so on.
 
 ## Configuration
 
@@ -453,14 +473,17 @@ Tested:
   started by zadbot, played to conquest, and read back from the replay.
 * The first full learning run and its evaluation on the real game (see
   *First learning run*).
+* `record` in the real game: 1000 Petra vs Petra games on Windows, 354 350
+  steps, every feature in range and every kind of decision present
+  (`rtsconcepts inspect`).
 
 Not shown:
 * That the learned bot beats Petra: on 200 fresh maps it wins 53 % vs
   Petra's 50 %, +3 points (95 % range -7 to +13), i.e. no clear difference.
 * Whether playing styles matter in real games: `evaluate --settings` is
   tested on the fake game only so far.
-* `record` in the real game: tested with Petra's modules and the fake game,
-  not yet in a real match.
+* A student playing the real game: so far the students only imitate
+  recorded Petra games (see *6. Record teacher data*).
 
 Limits:
 * On Windows the game sends its console text to the debugger rather than to

@@ -5,8 +5,9 @@ survive a change of game. The test is not "a strong 0 A.D. bot". It is:
 **does a student trained in 0 A.D. learn OpenRA with much less OpenRA
 experience than the same student trained on OpenRA alone?**
 
-Status: design, plus a working headless OpenRA setup (`openra/setup.sh`).
-Nothing below has been trained yet.
+Status: 1000 recorded Petra games; the imitation students (with and without
+concepts) are trained and scored on unseen games (*First results*). Not yet
+playing in either game. A working headless OpenRA setup (`openra/setup.sh`).
 
 ## Versions (checked)
 
@@ -76,23 +77,40 @@ executors' job.
 Values are normalised per game (costs, typical income), so the numbers mean
 the same thing in both.
 
+### Memory (the student's own decisions)
+
+Petra works in rhythms: an attack every few minutes, one phase at a time.
+So the student also sees what it decided lately (`memory.py`): per action,
+in how many of the last 6 steps it took it, and how many steps ago it last
+took it (up to 30). It keeps this memory itself in either game, so it needs
+nothing from the encoders. One class builds it from recordings for training
+and step by step in play, so the two can't differ.
+
 ### Concepts (the bottleneck)
 
-Each concept is a number 0..1, computed by a fixed formula from the features
-and from information the student doesn't see: the teacher's full view in
-recorded games. The student learns to predict them, and the policy only sees
-the predicted concepts plus a few raw features. That makes the concepts
-explicit, checkable and shared.
+Each concept is a number 0..1, computed by a fixed formula (`concepts.py`)
+from the features and from information the student doesn't see: the
+teacher's full view in recorded games and its recent decisions. The student
+learns to predict them, and the policy only sees the predicted concepts, the
+memory and a few raw features (game time, tech, bases). That makes the
+concepts explicit, checkable and shared.
 
-| concept | meaning (label) |
+"Capacity" is what the production buildings and bases spend per minute when
+busy: 5 (money / 100) each, the median in the 0 A.D. recordings.
+
+| concept | label |
 |---|---|
-| RESOURCE_SCARCITY | stockpile and income low compared with what production could spend |
-| PRODUCTION_BOTTLENECK | money piling up faster than production buildings can spend it |
-| SUPPLY_BLOCK | supply headroom near 0 (houses / power) |
-| ECONOMIC_INVESTMENT | share of recent spending on the economy |
-| MILITARY_ADVANTAGE | own army value vs the enemy's (the true value, from the recording) |
-| DEFENSIVE_PRESSURE | enemy army near own buildings, recent losses at home |
-| EXPANSION_OPPORTUNITY | own nearby resources running low while the map is quiet |
+| RESOURCE_SCARCITY | 1 − (stock + income) / 2 minutes of capacity |
+| PRODUCTION_BOTTLENECK | stock beyond 1 minute of capacity; full at 3 |
+| SUPPLY_BLOCK | 1 − supply headroom / 10 % |
+| ECONOMIC_INVESTMENT | economy's share of the last minute's decisions, by rough cost (workers, economy buildings, new bases vs army, production, defences) |
+| MILITARY_ADVANTAGE | own army value / (own + the enemy's true value) |
+| ECONOMIC_ADVANTAGE | own income / (own + the enemy's true income) |
+| DEFENSIVE_PRESSURE | (enemy army at home + losses) / (that + own army), while enemies are at home |
+
+EXPANSION_OPPORTUNITY (own nearby resources running low while the map is
+quiet) is left out for now: the recorder doesn't log the resources left near
+the bases. ECONOMIC_ADVANTAGE uses the recorded true enemy income instead.
 
 ### Macro actions
 
@@ -150,7 +168,7 @@ Petra vs Petra, recorded in the game:
 
 | gate | target | measured by |
 |---|---|---|
-| BC macro-action agreement | ≥ 90 % on held-out Petra games, familiar situations | recorded games not used in training |
+| BC macro-action AUC | ≥ 0.9 mean on held-out Petra games, rare decisions included | recorded games not used in training |
 | vs Petra, training maps | 70–80 % | `evaluate`, map by map |
 | vs Petra, unseen maps and seeds | 60–70 % | `evaluate --seed`, with the 95 % range |
 | vs Petra Very Hard (5) | within 10–15 points of Petra's own result vs Petra 5 | the same matches with Petra 3 in the student's place |
@@ -159,6 +177,45 @@ Petra vs Petra, recorded in the game:
 
 Stop when these hold: competent, not specialised on Petra. The win-rate gates
 need the reinforcement-learning step; BC alone is not expected to reach them.
+
+The first gate used to be "≥ 90 % agreement". With rare decisions, "always
+say no" already agrees 89 % of the time on average (99 % on TECH_UP), so it
+is now stated as AUC, which doesn't depend on a cut-off.
+
+## First results (1000 games, 0 A.D. 0.28.0)
+
+`zadbot record` on Windows, 16 games at a time: 1000 Petra vs Petra games
+(difficulty 2-5, every behaviour), 354 350 steps, median game 28 game-min,
+906 ended by conquest. Every feature is in range. Petra's own win rate
+rises with difficulty (18 % at 2 to 78 % at 5), as it should.
+
+Trained on 800 games and scored on the other 200 (`rtsconcepts bc`,
+`student --compare`, `curve`):
+
+| student | mean AUC | AUC on rare decisions (< 5 % of steps) | skill vs base rate |
+|---|---|---|---|
+| C: features only | 0.851 | 0.865 | 23 % |
+| C: features + memory | **0.893** | **0.926** | **33 %** |
+| A/B core: features + memory → concepts → decisions | 0.875 | 0.906 | 29 % |
+
+* The first report of `bc` said "no better than guessing" on every rare
+  decision (balanced accuracy 50 %). That was its 50 % cut-off: the model
+  never gave a rare decision more than 50 %, yet it ranked the right moments
+  first (AUC 0.81-0.91 without memory).
+* The memory adds most on the rhythmic decisions: ATTACK 0.88 → 0.94,
+  TECH_UP 0.91 → 0.97, BUILD_PRODUCTION 0.83 → 0.90, BUILD_DEFENSE
+  0.81 → 0.88. A bigger network adds almost nothing (0.856 with 3 × 128
+  units, features only).
+* The concepts are predicted closely on unseen games: 95-99 % of the
+  variation explained for those that follow from the features and the
+  memory, 88 % for the two that need the enemy's true army and income. The
+  bottleneck costs 0.02 AUC. Whether it pays for that in OpenRA is what the
+  A/B/C experiment measures.
+* BUILD_ECONOMY is the hardest decision (AUC 0.77-0.79): the features don't
+  say which resources run short or how far the gatherers walk.
+* Learning curve (features + memory): 50 games 0.827, 100 0.848, 200 0.871,
+  400 0.883, 800 0.893. Still rising, mostly on the rare decisions: record
+  more.
 
 ## Transfer experiment (OpenRA)
 
@@ -193,17 +250,17 @@ whether the concept layer is what transfers.
    definition (`rtsconcepts/spec.py`), the 0 A.D. encoder in JS
    (`zeroad/.../ai/zadbot/rts.js`, kept equal by a test) and the OpenRA
    encoder (`rtsconcepts/openra.py`, from OpenRA-RL's `get_game_state`).
-3. **Recorder done, data pending:** the AI "zadbot recorder (plain Petra)"
-   and `zadbot record`. It is checked on the real 0.28.0 Petra modules with a
-   made-up game state, and end to end on the stand-in game;
-   `rtsconcepts/dataset.py` loads the recordings. The first 2 real games
-   recorded fine: 666 steps, every kind of decision, no errors, and 0.3 min
-   of real time per game. Next: thousands of games.
-4. **Started:** `rtsconcepts inspect` (value ranges, decision rates) and
-   `rtsconcepts bc`, the imitation baseline without concepts (student C). It
-   is scored on unseen games next to "always the majority answer", with
-   balanced accuracy as the fair measure. Next: the concept bottleneck, and
-   the student playing in 0 A.D.
+3. **Done, more to come:** the AI "zadbot recorder (plain Petra)" and
+   `zadbot record`, checked on the real 0.28.0 Petra modules with a made-up
+   game state and end to end on the stand-in game; `rtsconcepts/dataset.py`
+   loads the recordings. 1000 real games recorded (*First results*). The
+   learning curve still rises: record more (`--seed 2`, ...).
+4. **Imitation done, playing next:** `rtsconcepts inspect` (value ranges,
+   decision rates, concept labels), `bc` (student C), `student` (the concept
+   core of A and B) and `curve`, all scored on unseen games without a
+   cut-off. The memory of own decisions is part of both students.
+   Next: the student playing in 0 A.D.: its weights in a generated JS file,
+   its decisions driving Petra's queues and managers.
 5. Evaluation vs Petra; reinforcement learning to pass the gates.
 6. **Started:** the OpenRA executor (`rtsconcepts/openra.py`: each macro
    action as OpenRA-RL tool calls, one structure at a time, attacks with a
@@ -219,6 +276,12 @@ whether the concept layer is what transfers.
      medium and normal do, and rush early.
    * A hand-written rule policy on this executor loses to OpenRA's easy AI on
      Ore Lord. So win/loss alone would show no difference between students.
+   * `policies.BCPolicy` plays either trained student: it keeps the memory
+     of its own decisions and, by default, takes each action with its
+     predicted probability, so rare decisions happen about as often as
+     Petra made them. (With a 50 % cut-off, the memory model would attack
+     in 0.2 % of steps instead of Petra's 1.6 %, and phase up in 0.05 %
+     instead of 0.7 %.)
 
    Next: a continuous outcome as in 0 A.D. (win +1, loss −1, and at the time
    limit the value killed minus lost, within ±0.5); a ladder of opponents
